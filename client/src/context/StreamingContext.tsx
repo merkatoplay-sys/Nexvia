@@ -2,13 +2,13 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { addDays, subDays, isBefore, isAfter, parseISO, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
-export type ServiceType = 'Netflix' | 'Spotify' | 'Disney+' | 'Crunchyroll' | 'HBO Max' | 'Prime Video' | 'YouTube Premium';
+export type ServiceType = string;
 
 /**
  * Obtiene el máximo número de perfiles permitidos por servicio
  */
 const getMaxProfilesByService = (serviceName: ServiceType): number => {
-  const limits: Record<ServiceType, number> = {
+  const limits: Record<string, number> = {
     'Netflix': 5,
     'Spotify': 7,
     'Disney+': 7,
@@ -87,12 +87,16 @@ interface StreamingContextType {
   accounts: Account[];
   clients: Client[];
   expenses: Expense[];
+  customServices: string[];
   addAccount: (account: Omit<Account, 'id' | 'status'>) => boolean;
   updateAccount: (id: string, updates: Partial<Account>) => boolean;
   deleteAccount: (id: string) => void;
   sellProfile: (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; endDate: string }) => boolean;
+  renewProfile: (accountId: string, profileId: string, renewalPrice: number) => boolean;
+  renewAccount: (accountId: string) => boolean;
   addClient: (client: Omit<Client, 'id'>) => string;
   addExpense: (expense: Omit<Expense, 'id'>) => void;
+  addCustomService: (serviceName: string, maxProfiles: number) => boolean;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
   getMaxProfilesByService: (serviceName: ServiceType) => number;
 }
@@ -112,7 +116,7 @@ const MOCK_ACCOUNTS: Account[] = [
     email: 'netflix.master@example.com',
     totalProfiles: 5,
     profiles: [
-      { id: 'p1', name: 'Familia', phone: '+52 555 123 4567', clientId: 'c1', price: 5, status: 'activo', startDate: new Date().toISOString(), endDate: addDays(new Date(), 30).toISOString() },
+      { id: 'p1', name: 'Familia', phone: '+52 555 123 4567', clientId: 'c1', price: 5, status: 'activo', startDate: new Date().toISOString(), endDate: addDays(new Date(), 1).toISOString() },
       { id: 'p2', name: 'Trabajo', phone: '+52 555 987 6543', clientId: 'c2', price: 5, status: 'activo', startDate: new Date().toISOString(), endDate: addDays(new Date(), 30).toISOString() },
       { id: 'p3', name: 'Disponible', status: 'disponible' },
       { id: 'p4', name: 'Disponible', status: 'disponible' },
@@ -158,10 +162,13 @@ const MOCK_EXPENSES: Expense[] = [
   }
 ];
 
+const CUSTOM_SERVICES_STORAGE: Record<string, number> = {};
+
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
+  const [customServices, setCustomServices] = useState<string[]>([]);
 
   const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
     const validation = validateProfileCount(newAccount.serviceName, newAccount.totalProfiles);
@@ -209,6 +216,23 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     setExpenses([...expenses, { ...expense, id }]);
   };
 
+  const addCustomService = (serviceName: string, maxProfiles: number) => {
+    if (!serviceName || maxProfiles < 1) {
+      toast.error('Datos inválidos para crear el servicio');
+      return false;
+    }
+
+    if (customServices.includes(serviceName)) {
+      toast.error('Este servicio ya existe');
+      return false;
+    }
+
+    CUSTOM_SERVICES_STORAGE[serviceName] = maxProfiles;
+    setCustomServices([...customServices, serviceName]);
+    toast.success(`Servicio "${serviceName}" creado exitosamente`);
+    return true;
+  };
+
   const sellProfile = (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; endDate: string }) => {
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) {
@@ -216,19 +240,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
 
-    // Buscar el perfil y verificar que esté disponible
     const profile = account.profiles.find(p => p.id === profileId);
-    if (!profile) {
-      toast.error('Perfil no encontrado');
-      return false;
-    }
-
-    if (profile.status !== 'disponible') {
+    if (!profile || profile.status !== 'disponible') {
       toast.error('Este perfil no está disponible');
       return false;
     }
 
-    // Crear o buscar cliente
     let clientId = '';
     const existingClient = clients.find(c => c.phone === clientData.phone);
     if (existingClient) {
@@ -237,7 +254,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       clientId = addClient({ name: clientData.name, phone: clientData.phone });
     }
 
-    // Actualizar el perfil
     const updatedAccounts = accounts.map(acc => {
       if (acc.id !== accountId) return acc;
       return {
@@ -261,6 +277,70 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
     setAccounts(updatedAccounts);
     toast.success(`Perfil vendido a ${clientData.name}`);
+    return true;
+  };
+
+  const renewProfile = (accountId: string, profileId: string, renewalPrice: number) => {
+    const account = accounts.find(acc => acc.id === accountId);
+    if (!account) {
+      toast.error('Cuenta no encontrada');
+      return false;
+    }
+
+    const profile = account.profiles.find(p => p.id === profileId);
+    if (!profile || profile.status !== 'activo') {
+      toast.error('Este perfil no puede renovarse');
+      return false;
+    }
+
+    const updatedAccounts = accounts.map(acc => {
+      if (acc.id !== accountId) return acc;
+      return {
+        ...acc,
+        profiles: acc.profiles.map(p => {
+          if (p.id !== profileId) return p;
+          return {
+            ...p,
+            endDate: addDays(new Date(p.endDate || new Date()), 30).toISOString(),
+            price: renewalPrice
+          };
+        })
+      };
+    });
+
+    setAccounts(updatedAccounts);
+    toast.success(`Perfil renovado exitosamente`);
+    return true;
+  };
+
+  const renewAccount = (accountId: string) => {
+    const account = accounts.find(acc => acc.id === accountId);
+    if (!account) {
+      toast.error('Cuenta no encontrada');
+      return false;
+    }
+
+    const newExpirationDate = addDays(new Date(account.expirationDate), 30).toISOString();
+    
+    const updatedAccounts = accounts.map(acc => {
+      if (acc.id !== accountId) return acc;
+      return {
+        ...acc,
+        expirationDate: newExpirationDate,
+        status: 'activa' as const
+      };
+    });
+
+    setAccounts(updatedAccounts);
+    addExpense({
+      description: `Renovación ${account.serviceName}`,
+      amount: account.cost,
+      type: 'renovación',
+      accountId,
+      date: new Date().toISOString()
+    });
+    
+    toast.success(`Cuenta ${account.serviceName} renovada exitosamente`);
     return true;
   };
 
@@ -298,12 +378,16 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       accounts, 
       clients, 
       expenses,
+      customServices,
       addAccount, 
       updateAccount, 
       deleteAccount, 
       sellProfile,
+      renewProfile,
+      renewAccount,
       addClient,
       addExpense,
+      addCustomService,
       getStats,
       getMaxProfilesByService
     }}>

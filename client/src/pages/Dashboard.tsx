@@ -1,10 +1,12 @@
 import { useStreaming } from '@/context/StreamingContext';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, DollarSign, TrendingUp, AlertTriangle, ArrowUpRight, MonitorPlay } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Dashboard() {
   const { getStats, accounts } = useStreaming();
+  const [, navigate] = useLocation();
   const stats = getStats();
 
   const container = {
@@ -99,7 +101,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="space-y-4">
                 {accounts.slice(0, 5).map(acc => (
-                  <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                  <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => navigate(`/account/${acc.id}`)}>
                     <div className="flex items-center space-x-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white
                         ${acc.serviceName === 'Netflix' ? 'bg-red-600' : 

@@ -3,6 +3,7 @@ import { StreamingProvider } from "@/context/StreamingContext";
 import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "@/pages/Dashboard";
 import Accounts from "@/pages/Accounts";
+import AccountDetail from "@/pages/AccountDetail";
 import Sales from "@/pages/Sales";
 import Finances from "@/pages/Finances";
 import AppLayout from "@/components/layout/AppLayout";
@@ -14,6 +15,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/accounts" component={Accounts} />
+        <Route path="/account/:id" component={AccountDetail} />
         <Route path="/sales" component={Sales} />
         <Route path="/finances" component={Finances} />
         <Route path="/clients" component={() => <div className="text-white">Módulo de Clientes (Próximamente)</div>} />

@@ -5,15 +5,17 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Plus, Search, Calendar, User, MoreVertical, CreditCard } from 'lucide-react';
+import { Plus, Search, Calendar, User, MoreVertical, CreditCard, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, sellProfile, getMaxProfilesByService } = useStreaming();
+  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, customServices, addCustomService } = useStreaming();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
+  const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
+  const [newService, setNewService] = useState({ name: '', maxProfiles: 7 });
   
   // New Account Form State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -67,12 +69,55 @@ export default function Accounts() {
           <p className="text-muted-foreground">Gestiona tus suscripciones y distribuye perfiles.</p>
         </div>
         
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
-              <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Dialog open={isAddServiceOpen} onOpenChange={setIsAddServiceOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white">
+                <Plus className="mr-2 h-4 w-4" /> Nuevo Servicio
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
+              <DialogHeader>
+                <DialogTitle>Crear Servicio Personalizado</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Nombre del Servicio</label>
+                  <Input 
+                    className="glass-input" 
+                    placeholder="Mi Servicio"
+                    value={newService.name} 
+                    onChange={e => setNewService({...newService, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Máximo de Perfiles</label>
+                  <Input 
+                    type="number" 
+                    className="glass-input" 
+                    value={newService.maxProfiles} 
+                    onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddServiceOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
+                <Button onClick={() => {
+                  if (addCustomService(newService.name, newService.maxProfiles)) {
+                    setIsAddServiceOpen(false);
+                    setNewService({ name: '', maxProfiles: 7 });
+                  }
+                }} className="bg-primary text-white">Crear Servicio</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
+                <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
+              </Button>
+            </DialogTrigger>
           <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
             <DialogHeader>
               <DialogTitle>Registrar Nueva Cuenta</DialogTitle>
@@ -89,7 +134,7 @@ export default function Accounts() {
                       <SelectValue placeholder="Servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {['Netflix', 'Spotify', 'Disney+', 'Crunchyroll', 'HBO Max', 'Prime Video'].map(s => (
+                      {['Netflix', 'Spotify', 'Disney+', 'Crunchyroll', 'HBO Max', 'Prime Video', ...customServices].map(s => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
@@ -156,7 +201,8 @@ export default function Accounts() {
               <Button onClick={handleAddAccount} className="bg-primary text-white">Guardar Cuenta</Button>
             </DialogFooter>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </div>
 
       {/* Filters */}
@@ -239,9 +285,21 @@ export default function Accounts() {
                         </div>
                         
                         {profile.status === 'activo' ? (
-                          <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
-                            {profile.phone ? profile.phone.substring(0, 10) : 'Ocupado'}
-                          </span>
+                          <div className="flex gap-2">
+                            {profile.endDate && differenceInDays(new Date(profile.endDate), new Date()) <= 1 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 text-[10px] bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
+                                onClick={() => renewProfile(account.id, profile.id, profile.price || account.pricePerProfile)}
+                              >
+                                <RotateCw className="h-3 w-3" />
+                              </Button>
+                            )}
+                            <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
+                              {profile.phone ? profile.phone.substring(0, 10) : 'Ocupado'}
+                            </span>
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Disponible</span>
                         )}
