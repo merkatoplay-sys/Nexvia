@@ -2,16 +2,19 @@ import { useStreaming } from '@/context/StreamingContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Plus, TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, DollarSign, PieChart, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Finances() {
-  const { accounts, expenses, addExpense, getStats } = useStreaming();
+  const { accounts, expenses, addExpense, renewAccount, getStats } = useStreaming();
   const stats = getStats();
   const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false);
+  const [isRenewDialogOpen, setIsRenewDialogOpen] = useState(false);
+  const [selectedAccountToRenew, setSelectedAccountToRenew] = useState<string>('');
   const [expenseData, setExpenseData] = useState({
     description: '',
     amount: 0,
@@ -72,6 +75,59 @@ export default function Finances() {
           <p className="text-muted-foreground">Ingresos, gastos y ganancias netas.</p>
         </div>
         
+        <Dialog open={isRenewDialogOpen} onOpenChange={setIsRenewDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-secondary hover:bg-secondary/90 text-black">
+              <RotateCw className="mr-2 h-4 w-4" /> Renovar Cuenta
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
+            <DialogHeader>
+              <DialogTitle>Renovar Cuenta Maestra</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Selecciona la cuenta</label>
+                <Select value={selectedAccountToRenew} onValueChange={setSelectedAccountToRenew}>
+                  <SelectTrigger className="glass-input">
+                    <SelectValue placeholder="Elige una cuenta" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-white/10 text-white">
+                    {accounts.map(acc => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.serviceName} - ${acc.cost}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedAccountToRenew && (
+                <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                  <p className="text-sm text-muted-foreground">Costo de renovación:</p>
+                  <p className="text-xl font-bold text-secondary">
+                    ${accounts.find(a => a.id === selectedAccountToRenew)?.cost || 0}
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRenewDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
+              <Button 
+                onClick={() => {
+                  if (selectedAccountToRenew) {
+                    renewAccount(selectedAccountToRenew);
+                    setIsRenewDialogOpen(false);
+                    setSelectedAccountToRenew('');
+                  }
+                }} 
+                className="bg-secondary text-black"
+              >
+                Renovar Cuenta
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-destructive hover:bg-destructive/90 text-white">
