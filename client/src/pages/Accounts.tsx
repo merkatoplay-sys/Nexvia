@@ -11,7 +11,7 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, assignProfile } = useStreaming();
+  const { accounts, addAccount, clients, assignProfile, getMaxProfilesByService } = useStreaming();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
   
@@ -41,7 +41,7 @@ export default function Accounts() {
       status: 'empty' as const
     }));
 
-    addAccount({
+    const success = addAccount({
       serviceName: newAccount.serviceName as ServiceType || 'Netflix',
       email: newAccount.email || '',
       password: newAccount.password || '',
@@ -53,7 +53,10 @@ export default function Accounts() {
       cost: Number(newAccount.cost) || 0,
       pricePerProfile: Number(newAccount.pricePerProfile) || 0
     });
-    setIsAddOpen(false);
+    
+    if (success) {
+      setIsAddOpen(false);
+    }
   };
 
   return (
@@ -93,12 +96,15 @@ export default function Accounts() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Perfiles</label>
+                  <label className="text-xs text-muted-foreground">
+                    Perfiles (Máx: {getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')})
+                  </label>
                   <Input 
                     type="number" 
                     className="glass-input" 
                     value={newAccount.totalProfiles} 
                     onChange={e => setNewAccount({...newAccount, totalProfiles: parseInt(e.target.value)})}
+                    max={getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')}
                   />
                 </div>
               </div>
