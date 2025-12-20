@@ -1,7 +1,44 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { addDays, subDays, isBefore, isAfter, parseISO } from 'date-fns';
+import { toast } from 'sonner';
 
 export type ServiceType = 'Netflix' | 'Spotify' | 'Disney+' | 'Crunchyroll' | 'HBO Max' | 'Prime Video' | 'YouTube Premium';
+
+/**
+ * Obtiene el máximo número de perfiles permitidos por servicio
+ */
+const getMaxProfilesByService = (serviceName: ServiceType): number => {
+  const limits: Record<ServiceType, number> = {
+    'Netflix': 5,
+    'Spotify': 7,
+    'Disney+': 7,
+    'Crunchyroll': 7,
+    'HBO Max': 7,
+    'Prime Video': 7,
+    'YouTube Premium': 7,
+  };
+  return limits[serviceName] || 7;
+};
+
+/**
+ * Valida que el número de perfiles no exceda el límite del servicio
+ */
+const validateProfileCount = (serviceName: ServiceType, profileCount: number): { valid: boolean; message?: string } => {
+  const max = getMaxProfilesByService(serviceName);
+  if (profileCount > max) {
+    return {
+      valid: false,
+      message: `${serviceName} permite un máximo de ${max} perfiles. Intentaste crear ${profileCount}.`
+    };
+  }
+  if (profileCount < 1) {
+    return {
+      valid: false,
+      message: 'Debes tener al menos 1 perfil.'
+    };
+  }
+  return { valid: true };
+};
 
 export interface Profile {
   id: string;
@@ -36,12 +73,13 @@ export interface Client {
 interface StreamingContextType {
   accounts: Account[];
   clients: Client[];
-  addAccount: (account: Omit<Account, 'id' | 'status'>) => void;
-  updateAccount: (id: string, updates: Partial<Account>) => void;
+  addAccount: (account: Omit<Account, 'id' | 'status'>) => boolean;
+  updateAccount: (id: string, updates: Partial<Account>) => boolean;
   deleteAccount: (id: string) => void;
   assignProfile: (accountId: string, profileId: string, clientId: string) => void;
   addClient: (client: Omit<Client, 'id'>) => string;
   getStats: () => { totalSales: number; totalCost: number; netProfit: number; activeAccounts: number; expiringSoon: number };
+  getMaxProfilesByService: (serviceName: ServiceType) => number;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);
@@ -99,12 +137,36 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
 
   const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
+    // Validar el número de perfiles
+    const validation = validateProfileCount(newAccount.serviceName, newAccount.totalProfiles);
+    if (!validation.valid) {
+      toast.error(validation.message);
+      return false;
+    }
+
     const id = Math.random().toString(36).substr(2, 9);
+    toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
     setAccounts([...accounts, { ...newAccount, id, status: 'active' }]);
+    return true;
   };
 
   const updateAccount = (id: string, updates: Partial<Account>) => {
+    // Si se actualiza el servicio o el número de perfiles, validar
+    const account = accounts.find(acc => acc.id === id);
+    if (!account) return false;
+
+    const serviceName = updates.serviceName || account.serviceName;
+    const totalProfiles = updates.totalProfiles || account.totalProfiles;
+
+    const validation = validateProfileCount(serviceName, totalProfiles);
+    if (!validation.valid) {
+      toast.error(validation.message);
+      return false;
+    }
+
     setAccounts(accounts.map(acc => (acc.id === id ? { ...acc, ...updates } : acc)));
+    toast.success('Cuenta actualizada exitosamente');
+    return true;
   };
 
   const deleteAccount = (id: string) => {
@@ -162,7 +224,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       deleteAccount, 
       assignProfile,
       addClient,
-      getStats
+      getStats,
+      getMaxProfilesByService
     }}>
       {children}
     </StreamingContext.Provider>
