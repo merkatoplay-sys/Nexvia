@@ -11,7 +11,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Cuentas', href: '/accounts', icon: MonitorPlay },
-    { name: 'Clientes', href: '/clients', icon: Users },
+    { name: 'Ventas', href: '/sales', icon: Users },
     { name: 'Finanzas', href: '/finances', icon: CreditCard },
     { name: 'Configuración', href: '/settings', icon: Settings },
   ];
