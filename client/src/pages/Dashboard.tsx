@@ -39,14 +39,12 @@ export default function Dashboard() {
         <motion.div variants={item}>
           <Card className="glass-card hover:bg-card/80 transition-colors">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Ventas Totales</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Ingresos Totales</CardTitle>
               <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold font-display text-white">${stats.totalSales}</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <span className="text-emerald-500 flex items-center mr-1"><ArrowUpRight className="h-3 w-3 mr-0.5" /> +20.1%</span> vs mes pasado
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Por venta de perfiles</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -115,9 +113,9 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium text-white">{acc.profiles.filter(p => p.status === 'active').length} / {acc.totalProfiles} perfiles</p>
-                      <p className={`text-xs ${acc.status === 'expiring_soon' ? 'text-orange-500' : 'text-emerald-500'}`}>
-                        {acc.status === 'expiring_soon' ? 'Vence pronto' : 'Activa'}
+                      <p className="text-sm font-medium text-white">{acc.profiles.filter(p => p.status === 'activo').length} / {acc.totalProfiles} perfiles</p>
+                      <p className={`text-xs ${acc.status === 'por vencer' ? 'text-orange-500' : 'text-emerald-500'}`}>
+                        {acc.status === 'por vencer' ? 'Vence pronto' : 'Activa'}
                       </p>
                     </div>
                   </div>

@@ -11,7 +11,7 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, assignProfile, getMaxProfilesByService } = useStreaming();
+  const { accounts, addAccount, clients, sellProfile, getMaxProfilesByService } = useStreaming();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
   
@@ -37,8 +37,8 @@ export default function Accounts() {
 
     const profiles = Array.from({ length: newAccount.totalProfiles || 5 }, (_, i) => ({
       id: Math.random().toString(36).substr(2, 9),
-      name: `Perfil ${i + 1}`,
-      status: 'empty' as const
+      name: `Disponible`,
+      status: 'disponible' as const
     }));
 
     const success = addAccount({
@@ -232,38 +232,18 @@ export default function Accounts() {
                     {account.profiles.map((profile) => (
                       <div key={profile.id} className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm group/profile">
                         <div className="flex items-center gap-2">
-                          <User className={`h-3 w-3 ${profile.status === 'active' ? 'text-primary' : 'text-muted-foreground'}`} />
-                          <span className={`${profile.status === 'empty' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                          <User className={`h-3 w-3 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <span className={`${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
                             {profile.name}
                           </span>
                         </div>
                         
-                        {profile.status === 'active' ? (
+                        {profile.status === 'activo' ? (
                           <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
-                            {clients.find(c => c.id === profile.clientId)?.name.split(' ')[0] || 'Ocupado'}
+                            {profile.phone ? profile.phone.substring(0, 10) : 'Ocupado'}
                           </span>
                         ) : (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                               <Button size="sm" variant="ghost" className="h-6 text-[10px] bg-white/5 hover:bg-primary hover:text-white">
-                                 Asignar
-                               </Button>
-                            </DialogTrigger>
-                            <DialogContent className="bg-card text-white border-white/10">
-                              <DialogHeader><DialogTitle>Asignar Cliente</DialogTitle></DialogHeader>
-                              <div className="space-y-4 py-4">
-                                <p className="text-sm text-muted-foreground">Selecciona un cliente para el perfil <strong>{profile.name}</strong></p>
-                                <Select onValueChange={(clientId) => assignProfile(account.id, profile.id, clientId)}>
-                                  <SelectTrigger className="glass-input">
-                                    <SelectValue placeholder="Seleccionar Cliente" />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-popover border-white/10 text-white">
-                                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
+                          <span className="text-xs text-muted-foreground italic">Disponible</span>
                         )}
                       </div>
                     ))}
