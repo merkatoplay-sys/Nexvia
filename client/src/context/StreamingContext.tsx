@@ -89,6 +89,7 @@ interface StreamingContextType {
   getAllProfiles: () => Array<Profile & { accountId: string; accountName: string }>;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
   getServiceColor: (serviceName: string) => string;
+  getMaxProfilesByService: (serviceName: ServiceType) => number;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);

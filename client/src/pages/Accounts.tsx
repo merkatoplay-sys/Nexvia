@@ -11,11 +11,11 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, customServices, addCustomService } = useStreaming();
+  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, services, addService } = useStreaming();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
   const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
-  const [newService, setNewService] = useState({ name: '', maxProfiles: 7 });
+  const [newService, setNewService] = useState({ name: '', color: '#7B68EE', maxProfiles: 7 });
   
   // New Account Form State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -91,6 +91,23 @@ export default function Accounts() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Color</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="color" 
+                      value={newService.color}
+                      onChange={e => setNewService({...newService, color: e.target.value})}
+                      className="w-12 h-10 rounded cursor-pointer"
+                    />
+                    <Input 
+                      className="glass-input" 
+                      placeholder="#7B68EE"
+                      value={newService.color} 
+                      onChange={e => setNewService({...newService, color: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Máximo de Perfiles</label>
                   <Input 
                     type="number" 
@@ -103,9 +120,9 @@ export default function Accounts() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddServiceOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
                 <Button onClick={() => {
-                  if (addCustomService(newService.name, newService.maxProfiles)) {
+                  if (addService({ name: newService.name, color: newService.color, maxProfiles: newService.maxProfiles, isCustom: true })) {
                     setIsAddServiceOpen(false);
-                    setNewService({ name: '', maxProfiles: 7 });
+                    setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
                   }
                 }} className="bg-primary text-white">Crear Servicio</Button>
               </DialogFooter>
@@ -134,8 +151,8 @@ export default function Accounts() {
                       <SelectValue placeholder="Servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {['Netflix', 'Spotify', 'Disney+', 'Crunchyroll', 'HBO Max', 'Prime Video', ...customServices].map(s => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      {services.map(s => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
