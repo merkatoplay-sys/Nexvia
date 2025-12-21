@@ -4,41 +4,13 @@ import { toast } from 'sonner';
 
 export type ServiceType = string;
 
-/**
- * Obtiene el máximo número de perfiles permitidos por servicio
- */
-const getMaxProfilesByService = (serviceName: ServiceType): number => {
-  const limits: Record<string, number> = {
-    'Netflix': 5,
-    'Spotify': 7,
-    'Disney+': 7,
-    'Crunchyroll': 7,
-    'HBO Max': 7,
-    'Prime Video': 7,
-    'YouTube Premium': 7,
-  };
-  return limits[serviceName] || 7;
-};
-
-/**
- * Valida que el número de perfiles no exceda el límite del servicio
- */
-const validateProfileCount = (serviceName: ServiceType, profileCount: number): { valid: boolean; message?: string } => {
-  const max = getMaxProfilesByService(serviceName);
-  if (profileCount > max) {
-    return {
-      valid: false,
-      message: `${serviceName} permite un máximo de ${max} perfiles. Intentaste crear ${profileCount}.`
-    };
-  }
-  if (profileCount < 1) {
-    return {
-      valid: false,
-      message: 'Debes tener al menos 1 perfil.'
-    };
-  }
-  return { valid: true };
-};
+export interface Service {
+  id: string;
+  name: string;
+  color: string;
+  maxProfiles: number;
+  isCustom: boolean;
+}
 
 export interface Profile {
   id: string;
@@ -87,21 +59,32 @@ interface StreamingContextType {
   accounts: Account[];
   clients: Client[];
   expenses: Expense[];
-  customServices: string[];
+  services: Service[];
   addAccount: (account: Omit<Account, 'id' | 'status'>) => boolean;
   updateAccount: (id: string, updates: Partial<Account>) => boolean;
   deleteAccount: (id: string) => void;
-  sellProfile: (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; endDate: string }) => boolean;
+  sellProfile: (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => boolean;
   renewProfile: (accountId: string, profileId: string, renewalPrice: number) => boolean;
   renewAccount: (accountId: string) => boolean;
   addClient: (client: Omit<Client, 'id'>) => string;
   addExpense: (expense: Omit<Expense, 'id'>) => void;
-  addCustomService: (serviceName: string, maxProfiles: number) => boolean;
+  addService: (service: Omit<Service, 'id'>) => boolean;
+  updateService: (id: string, updates: Partial<Service>) => boolean;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
-  getMaxProfilesByService: (serviceName: ServiceType) => number;
+  getServiceColor: (serviceName: string) => string;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);
+
+const DEFAULT_SERVICES: Service[] = [
+  { id: 's1', name: 'Netflix', color: '#E50914', maxProfiles: 5, isCustom: false },
+  { id: 's2', name: 'Spotify', color: '#1DB954', maxProfiles: 7, isCustom: false },
+  { id: 's3', name: 'Disney+', color: '#0072F5', maxProfiles: 7, isCustom: false },
+  { id: 's4', name: 'Prime Video', color: '#146EB4', maxProfiles: 7, isCustom: false },
+  { id: 's5', name: 'HBO', color: '#000000', maxProfiles: 7, isCustom: false },
+  { id: 's6', name: 'Crunchyroll', color: '#F47521', maxProfiles: 7, isCustom: false },
+  { id: 's7', name: 'Vix', color: '#7B68EE', maxProfiles: 7, isCustom: false },
+];
 
 const MOCK_CLIENTS: Client[] = [
   { id: 'c1', name: 'Juan Pérez', phone: '+52 555 123 4567' },
@@ -120,7 +103,7 @@ const MOCK_ACCOUNTS: Account[] = [
       { id: 'p2', name: 'Trabajo', phone: '+52 555 987 6543', clientId: 'c2', price: 5, status: 'activo', startDate: new Date().toISOString(), endDate: addDays(new Date(), 30).toISOString() },
       { id: 'p3', name: 'Disponible', status: 'disponible' },
       { id: 'p4', name: 'Disponible', status: 'disponible' },
-      { id: 'p5', name: 'Kids', status: 'disponible' },
+      { id: 'p5', name: 'Disponible', status: 'disponible' },
     ],
     startDate: new Date().toISOString(),
     expirationDate: addDays(new Date(), 25).toISOString(),
@@ -162,18 +145,18 @@ const MOCK_EXPENSES: Expense[] = [
   }
 ];
 
-const CUSTOM_SERVICES_STORAGE: Record<string, number> = {};
-
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
-  const [customServices, setCustomServices] = useState<string[]>([]);
+  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES);
 
   const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
-    const validation = validateProfileCount(newAccount.serviceName, newAccount.totalProfiles);
-    if (!validation.valid) {
-      toast.error(validation.message);
+    const service = services.find(s => s.name === newAccount.serviceName);
+    const maxProfiles = service?.maxProfiles || 7;
+    
+    if (newAccount.totalProfiles > maxProfiles) {
+      toast.error(`${newAccount.serviceName} permite un máximo de ${maxProfiles} perfiles.`);
       return false;
     }
 
@@ -186,16 +169,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const updateAccount = (id: string, updates: Partial<Account>) => {
     const account = accounts.find(acc => acc.id === id);
     if (!account) return false;
-
-    const serviceName = updates.serviceName || account.serviceName;
-    const totalProfiles = updates.totalProfiles || account.totalProfiles;
-
-    const validation = validateProfileCount(serviceName, totalProfiles);
-    if (!validation.valid) {
-      toast.error(validation.message);
-      return false;
-    }
-
     setAccounts(accounts.map(acc => (acc.id === id ? { ...acc, ...updates } : acc)));
     toast.success('Cuenta actualizada exitosamente');
     return true;
@@ -216,24 +189,24 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     setExpenses([...expenses, { ...expense, id }]);
   };
 
-  const addCustomService = (serviceName: string, maxProfiles: number) => {
-    if (!serviceName || maxProfiles < 1) {
-      toast.error('Datos inválidos para crear el servicio');
-      return false;
-    }
-
-    if (customServices.includes(serviceName)) {
+  const addService = (service: Omit<Service, 'id'>) => {
+    if (services.some(s => s.name === service.name)) {
       toast.error('Este servicio ya existe');
       return false;
     }
-
-    CUSTOM_SERVICES_STORAGE[serviceName] = maxProfiles;
-    setCustomServices([...customServices, serviceName]);
-    toast.success(`Servicio "${serviceName}" creado exitosamente`);
+    const id = Math.random().toString(36).substr(2, 9);
+    setServices([...services, { ...service, id }]);
+    toast.success(`Servicio "${service.name}" creado exitosamente`);
     return true;
   };
 
-  const sellProfile = (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; endDate: string }) => {
+  const updateService = (id: string, updates: Partial<Service>) => {
+    setServices(services.map(s => (s.id === id ? { ...s, ...updates } : s)));
+    toast.success('Servicio actualizado exitosamente');
+    return true;
+  };
+
+  const sellProfile = (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => {
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
@@ -268,7 +241,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
             price: clientData.price,
             status: 'activo' as const,
             clientId,
-            startDate: new Date().toISOString(),
+            startDate: clientData.startDate,
             endDate: clientData.endDate
           };
         })
@@ -309,6 +282,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     });
 
     setAccounts(updatedAccounts);
+    addExpense({
+      description: `Renovación ${profile.name}`,
+      amount: renewalPrice,
+      type: 'renovación',
+      accountId,
+      date: new Date().toISOString()
+    });
     toast.success(`Perfil renovado exitosamente`);
     return true;
   };
@@ -373,12 +353,17 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     };
   };
 
+  const getServiceColor = (serviceName: string): string => {
+    const service = services.find(s => s.name === serviceName);
+    return service?.color || '#7B68EE';
+  };
+
   return (
     <StreamingContext.Provider value={{ 
       accounts, 
       clients, 
       expenses,
-      customServices,
+      services,
       addAccount, 
       updateAccount, 
       deleteAccount, 
@@ -387,9 +372,10 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       renewAccount,
       addClient,
       addExpense,
-      addCustomService,
+      addService,
+      updateService,
       getStats,
-      getMaxProfilesByService
+      getServiceColor
     }}>
       {children}
     </StreamingContext.Provider>

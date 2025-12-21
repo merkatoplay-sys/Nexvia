@@ -1,11 +1,14 @@
 import { useStreaming } from '@/context/StreamingContext';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, DollarSign, TrendingUp, AlertTriangle, ArrowUpRight, MonitorPlay } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Users, DollarSign, TrendingUp, AlertTriangle, RotateCw, ShoppingCart } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { differenceInDays } from 'date-fns';
 
 export default function Dashboard() {
-  const { getStats, accounts } = useStreaming();
+  const { getStats, accounts, renewAccount, renewProfile, getServiceColor } = useStreaming();
   const [, navigate] = useLocation();
   const stats = getStats();
 
@@ -24,6 +27,22 @@ export default function Dashboard() {
     show: { y: 0, opacity: 1 }
   };
 
+  // Encontrar cuentas y perfiles por vencer
+  const expiringSoonAccounts = accounts.filter(acc => {
+    const days = differenceInDays(new Date(acc.expirationDate), new Date());
+    return days <= 3 && days >= 0;
+  });
+
+  const expiringSoonProfiles = accounts.flatMap(acc => 
+    acc.profiles
+      .filter(p => p.status === 'activo' && p.endDate)
+      .filter(p => {
+        const days = differenceInDays(new Date(p.endDate!), new Date());
+        return days <= 3 && days >= 0;
+      })
+      .map(p => ({ ...p, accountId: acc.id, accountName: acc.serviceName }))
+  );
+
   return (
     <motion.div 
       variants={container}
@@ -31,9 +50,17 @@ export default function Dashboard() {
       animate="show"
       className="space-y-8"
     >
-      <div>
-        <h1 className="text-3xl font-display font-bold text-white mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">Bienvenido de nuevo. Aquí está el resumen de tu negocio.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-white mb-2">Dashboard</h1>
+          <p className="text-muted-foreground">Bienvenido de nuevo. Aquí está el resumen de tu negocio.</p>
+        </div>
+        <Button 
+          onClick={() => navigate('/sales')}
+          className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]"
+        >
+          <ShoppingCart className="mr-2 h-4 w-4" /> Hacer Venta
+        </Button>
       </div>
 
       {/* Stats Grid */}
@@ -84,67 +111,140 @@ export default function Dashboard() {
               <AlertTriangle className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-orange-500">{stats.expiringSoon}</div>
+              <div className="text-2xl font-bold font-display text-orange-500">{expiringSoonAccounts.length + expiringSoonProfiles.length}</div>
               <p className="text-xs text-muted-foreground mt-1">En los próximos 3 días</p>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Quick Actions / Recent Activity Area could go here */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <motion.div variants={item} className="col-span-4">
-          <Card className="glass-card h-full">
+      {/* Cuentas y Perfiles por Vencer */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Cuentas Maestras por Vencer */}
+        <motion.div variants={item}>
+          <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="text-white">Cuentas Recientes</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-500" /> Cuentas Maestras por Vencer
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {accounts.slice(0, 5).map(acc => (
-                  <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => navigate(`/account/${acc.id}`)}>
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white
-                        ${acc.serviceName === 'Netflix' ? 'bg-red-600' : 
-                          acc.serviceName === 'Spotify' ? 'bg-green-500' : 
-                          acc.serviceName === 'Disney+' ? 'bg-blue-600' : 'bg-primary'}`}>
-                        {acc.serviceName.substring(0, 1)}
+              {expiringSoonAccounts.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Todas tus cuentas están activas</p>
+              ) : (
+                <div className="space-y-3">
+                  {expiringSoonAccounts.map(acc => (
+                    <div key={acc.id} className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                            style={{ backgroundColor: getServiceColor(acc.serviceName) }}
+                          >
+                            {acc.serviceName.substring(0, 1)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">{acc.serviceName}</p>
+                            <p className="text-xs text-muted-foreground">{acc.email}</p>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-white">{acc.serviceName}</p>
-                        <p className="text-xs text-muted-foreground">{acc.email}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-orange-400">
+                          {differenceInDays(new Date(acc.expirationDate), new Date())} días restantes
+                        </span>
+                        <Button
+                          size="sm"
+                          onClick={() => renewAccount(acc.id)}
+                          className="h-7 text-xs bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400"
+                        >
+                          <RotateCw className="h-3 w-3 mr-1" /> Renovar
+                        </Button>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-white">{acc.profiles.filter(p => p.status === 'activo').length} / {acc.totalProfiles} perfiles</p>
-                      <p className={`text-xs ${acc.status === 'por vencer' ? 'text-orange-500' : 'text-emerald-500'}`}>
-                        {acc.status === 'por vencer' ? 'Vence pronto' : 'Activa'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
 
-        <motion.div variants={item} className="col-span-3">
-           <Card className="glass-card h-full">
+        {/* Perfiles por Vencer */}
+        <motion.div variants={item}>
+          <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="text-white">Acciones Rápidas</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-orange-500" /> Perfiles por Vencer
+              </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-2">
-              <div className="p-4 rounded-lg bg-primary/10 border border-primary/20 text-primary cursor-pointer hover:bg-primary/20 transition-colors flex items-center">
-                <Users className="mr-3 h-5 w-5" />
-                Registrar Nuevo Cliente
-              </div>
-              <div className="p-4 rounded-lg bg-secondary/10 border border-secondary/20 text-secondary cursor-pointer hover:bg-secondary/20 transition-colors flex items-center">
-                <MonitorPlay className="mr-3 h-5 w-5" />
-                Añadir Cuenta Maestra
-              </div>
+            <CardContent>
+              {expiringSoonProfiles.length === 0 ? (
+                <p className="text-muted-foreground text-sm">Todos los perfiles están vigentes</p>
+              ) : (
+                <div className="space-y-3">
+                  {expiringSoonProfiles.map((profile, idx) => (
+                    <div key={`${profile.accountId}-${profile.id}`} className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="text-sm font-medium text-white">{profile.name}</p>
+                          <p className="text-xs text-muted-foreground">{profile.accountName}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-orange-400">
+                          {differenceInDays(new Date(profile.endDate!), new Date())} días restantes
+                        </span>
+                        <Button
+                          size="sm"
+                          onClick={() => renewProfile(profile.accountId as string, profile.id, profile.price || 5)}
+                          className="h-7 text-xs bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400"
+                        >
+                          <RotateCw className="h-3 w-3 mr-1" /> Renovar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
+
+      {/* Cuentas Recientes */}
+      <motion.div variants={item}>
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="text-white">Cuentas Recientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {accounts.slice(0, 5).map(acc => (
+                <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => navigate(`/account/${acc.id}`)}>
+                  <div className="flex items-center space-x-4">
+                    <div 
+                      className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white"
+                      style={{ backgroundColor: getServiceColor(acc.serviceName) }}
+                    >
+                      {acc.serviceName.substring(0, 1)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">{acc.serviceName}</p>
+                      <p className="text-xs text-muted-foreground">{acc.email}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-white">{acc.profiles.filter(p => p.status === 'activo').length} / {acc.totalProfiles} perfiles</p>
+                    <Badge className={acc.status === 'activa' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}>
+                      {acc.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
     </motion.div>
   );
 }
