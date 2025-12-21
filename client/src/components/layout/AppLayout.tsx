@@ -12,6 +12,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Cuentas', href: '/accounts', icon: MonitorPlay },
     { name: 'Ventas', href: '/sales', icon: Users },
+    { name: 'Perfiles', href: '/profiles', icon: Users },
     { name: 'Servicios', href: '/services', icon: CreditCard },
     { name: 'Finanzas', href: '/finances', icon: CreditCard },
     { name: 'Configuración', href: '/settings', icon: Settings },
