@@ -18,7 +18,7 @@ export default function Finances() {
   const [expenseData, setExpenseData] = useState({
     description: '',
     amount: 0,
-    type: 'otro' as 'renovación' | 'otro'
+    type: 'gasto' as 'ganancia' | 'gasto'
   });
 
   const handleAddExpense = () => {
@@ -34,20 +34,11 @@ export default function Finances() {
     });
 
     setIsExpenseDialogOpen(false);
-    setExpenseData({ description: '', amount: 0, type: 'otro' });
+    setExpenseData({ description: '', amount: 0, type: 'gasto' });
   };
 
-  // Calcular totales por tipo
-  const renewalCosts = expenses.filter(e => e.type === 'renovación').reduce((sum, e) => sum + e.amount, 0);
-  const otherCosts = expenses.filter(e => e.type === 'otro').reduce((sum, e) => sum + e.amount, 0);
-
-  // Agrupar gastos por cuenta
-  const accountExpenses: { [key: string]: number } = {};
-  expenses.forEach(exp => {
-    if (exp.accountId) {
-      accountExpenses[exp.accountId] = (accountExpenses[exp.accountId] || 0) + exp.amount;
-    }
-  });
+  const ganancias = expenses.filter(e => e.type === 'ganancia').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const gastos = expenses.filter(e => e.type === 'gasto').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const container = {
     hidden: { opacity: 0 },
@@ -75,196 +66,185 @@ export default function Finances() {
           <p className="text-muted-foreground">Ingresos, gastos y ganancias netas.</p>
         </div>
         
-        <Dialog open={isRenewDialogOpen} onOpenChange={setIsRenewDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-secondary hover:bg-secondary/90 text-black">
-              <RotateCw className="mr-2 h-4 w-4" /> Renovar Cuenta
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
-            <DialogHeader>
-              <DialogTitle>Renovar Cuenta Maestra</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Selecciona la cuenta</label>
-                <Select value={selectedAccountToRenew} onValueChange={setSelectedAccountToRenew}>
-                  <SelectTrigger className="glass-input">
-                    <SelectValue placeholder="Elige una cuenta" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-white/10 text-white">
-                    {accounts.map(acc => (
-                      <SelectItem key={acc.id} value={acc.id}>
-                        {acc.serviceName} - ${acc.cost}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedAccountToRenew && (
-                <div className="bg-white/5 p-3 rounded-lg border border-white/10">
-                  <p className="text-sm text-muted-foreground">Costo de renovación:</p>
-                  <p className="text-xl font-bold text-secondary">
-                    ${accounts.find(a => a.id === selectedAccountToRenew)?.cost || 0}
-                  </p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsRenewDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button 
-                onClick={() => {
-                  if (selectedAccountToRenew) {
-                    renewAccount(selectedAccountToRenew);
-                    setIsRenewDialogOpen(false);
-                    setSelectedAccountToRenew('');
-                  }
-                }} 
-                className="bg-secondary text-black"
-              >
-                Renovar Cuenta
+        <div className="flex gap-2">
+          <Dialog open={isRenewDialogOpen} onOpenChange={setIsRenewDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-secondary hover:bg-secondary/90 text-black">
+                <RotateCw className="mr-2 h-4 w-4" /> Renovar Cuenta
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-destructive hover:bg-destructive/90 text-white">
-              <Plus className="mr-2 h-4 w-4" /> Registrar Gasto
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
-            <DialogHeader>
-              <DialogTitle>Registrar Nuevo Gasto</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Descripción</label>
-                <Input 
-                  className="glass-input" 
-                  placeholder="Renovación Netflix, etc."
-                  value={expenseData.description} 
-                  onChange={e => setExpenseData({...expenseData, description: e.target.value})}
-                />
+            </DialogTrigger>
+            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
+              <DialogHeader>
+                <DialogTitle>Renovar Cuenta Maestra</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Selecciona la cuenta</label>
+                  <Select value={selectedAccountToRenew} onValueChange={setSelectedAccountToRenew}>
+                    <SelectTrigger className="glass-input">
+                      <SelectValue placeholder="Elige una cuenta" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-white/10 text-white">
+                      {accounts.map(acc => (
+                        <SelectItem key={acc.id} value={acc.id}>
+                          {acc.serviceName} - ${acc.cost}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedAccountToRenew && (
+                  <div className="bg-white/5 p-3 rounded-lg border border-white/10">
+                    <p className="text-sm text-muted-foreground">Costo de renovación:</p>
+                    <p className="text-xl font-bold text-secondary">
+                      ${accounts.find(a => a.id === selectedAccountToRenew)?.cost || 0}
+                    </p>
+                  </div>
+                )}
               </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsRenewDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
+                <Button 
+                  onClick={() => {
+                    if (selectedAccountToRenew) {
+                      renewAccount(selectedAccountToRenew);
+                      setIsRenewDialogOpen(false);
+                      setSelectedAccountToRenew('');
+                    }
+                  }} 
+                  className="bg-secondary text-black"
+                >
+                  Renovar Cuenta
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Tipo</label>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className={`flex-1 border-white/10 ${expenseData.type === 'renovación' ? 'bg-primary/20 text-primary border-primary/50' : 'hover:bg-white/5 text-white'}`}
-                    onClick={() => setExpenseData({...expenseData, type: 'renovación'})}
-                  >
-                    Renovación
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className={`flex-1 border-white/10 ${expenseData.type === 'otro' ? 'bg-destructive/20 text-destructive border-destructive/50' : 'hover:bg-white/5 text-white'}`}
-                    onClick={() => setExpenseData({...expenseData, type: 'otro'})}
-                  >
-                    Otro
-                  </Button>
+          <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-destructive hover:bg-destructive/90 text-white">
+                <Plus className="mr-2 h-4 w-4" /> Registrar Gasto
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Registrar Gasto</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Descripción</label>
+                  <Input 
+                    className="glass-input" 
+                    placeholder="Ej: Renovación adicional"
+                    value={expenseData.description} 
+                    onChange={e => setExpenseData({...expenseData, description: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Monto</label>
+                    <Input 
+                      type="number" 
+                      className="glass-input" 
+                      value={expenseData.amount} 
+                      onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Tipo</label>
+                    <Select value={expenseData.type} onValueChange={val => setExpenseData({...expenseData, type: val as 'ganancia' | 'gasto'})}>
+                      <SelectTrigger className="glass-input">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-white/10 text-white">
+                        <SelectItem value="gasto">Gasto</SelectItem>
+                        <SelectItem value="ganancia">Ganancia</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Monto ($)</label>
-                <Input 
-                  type="number" 
-                  className="glass-input" 
-                  value={expenseData.amount} 
-                  onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value)})}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsExpenseDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleAddExpense} className="bg-destructive text-white">Registrar Gasto</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsExpenseDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
+                <Button onClick={handleAddExpense} className="bg-primary text-white">Registrar</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <motion.div variants={item}>
-          <Card className="glass-card hover:bg-card/80 transition-colors">
+          <Card className="glass-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Ingresos Totales</CardTitle>
               <TrendingUp className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-emerald-500">${stats.totalSales.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Venta de perfiles</p>
+              <div className="text-2xl font-bold font-display text-emerald-400">${stats.totalSales}</div>
+              <p className="text-xs text-muted-foreground mt-1">{ganancias.length} transacciones</p>
             </CardContent>
           </Card>
         </motion.div>
 
         <motion.div variants={item}>
-          <Card className="glass-card hover:bg-card/80 transition-colors">
+          <Card className="glass-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Gastos Totales</CardTitle>
-              <TrendingDown className="h-4 w-4 text-orange-500" />
+              <TrendingDown className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-orange-500">${stats.totalExpenses.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Renovaciones y otros</p>
+              <div className="text-2xl font-bold font-display text-red-400">${stats.totalExpenses}</div>
+              <p className="text-xs text-muted-foreground mt-1">{gastos.length} transacciones</p>
             </CardContent>
           </Card>
         </motion.div>
 
         <motion.div variants={item}>
-          <Card className="glass-card hover:bg-card/80 transition-colors">
+          <Card className="glass-card">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Ganancia Neta</CardTitle>
               <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-primary neon-text">${stats.netProfit.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Después de gastos</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={item}>
-          <Card className="glass-card hover:bg-card/80 transition-colors">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Margen</CardTitle>
-              <PieChart className="h-4 w-4 text-secondary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold font-display text-secondary">
-                {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%
+              <div className={`text-2xl font-bold font-display ${stats.netProfit >= 0 ? 'text-white neon-text' : 'text-red-400'}`}>
+                ${stats.netProfit}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Margen de ganancia</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Margen {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%
+              </p>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Desglose de Gastos */}
+      {/* Historial de Ganancias y Gastos */}
       <div className="grid gap-6 md:grid-cols-2">
         <motion.div variants={item}>
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="text-white">Desglose de Gastos</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-emerald-400" /> Ganancias
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center p-4 rounded-lg bg-white/5 border border-white/5">
-                <div>
-                  <p className="text-sm text-white font-medium">Renovaciones</p>
-                  <p className="text-xs text-muted-foreground">Costo de renovación de cuentas</p>
-                </div>
-                <p className="text-lg font-bold text-orange-500">${renewalCosts.toFixed(2)}</p>
-              </div>
-              <div className="flex justify-between items-center p-4 rounded-lg bg-white/5 border border-white/5">
-                <div>
-                  <p className="text-sm text-white font-medium">Otros Gastos</p>
-                  <p className="text-xs text-muted-foreground">Otros costos operacionales</p>
-                </div>
-                <p className="text-lg font-bold text-red-500">${otherCosts.toFixed(2)}</p>
+            <CardContent>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {ganancias.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">Sin ganancias registradas</p>
+                ) : (
+                  ganancias.map(exp => (
+                    <div key={exp.id} className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-white">{exp.description}</p>
+                          <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'dd MMM yyyy HH:mm')}</p>
+                        </div>
+                        <p className="text-sm font-bold text-emerald-400">+${exp.amount}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -273,60 +253,32 @@ export default function Finances() {
         <motion.div variants={item}>
           <Card className="glass-card">
             <CardHeader>
-              <CardTitle className="text-white">Gastos por Servicio</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-400" /> Gastos
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {accounts.map(account => (
-                  <div key={account.id} className="flex justify-between items-center p-3 rounded-lg bg-white/5 border border-white/5">
-                    <div>
-                      <p className="text-sm text-white font-medium">{account.serviceName}</p>
-                      <p className="text-xs text-muted-foreground">{account.email}</p>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {gastos.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">Sin gastos registrados</p>
+                ) : (
+                  gastos.map(exp => (
+                    <div key={exp.id} className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-white">{exp.description}</p>
+                          <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'dd MMM yyyy HH:mm')}</p>
+                        </div>
+                        <p className="text-sm font-bold text-red-400">-${exp.amount}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-white">${account.cost.toFixed(2)}</p>
-                      {accountExpenses[account.id] && (
-                        <p className="text-xs text-orange-500">+${accountExpenses[account.id].toFixed(2)} renovaciones</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
         </motion.div>
       </div>
-
-      {/* Historial de Gastos */}
-      <motion.div variants={item}>
-        <Card className="glass-card">
-          <CardHeader>
-            <CardTitle className="text-white">Historial de Gastos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {expenses.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No hay gastos registrados.</p>
-              ) : (
-                expenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(expense => (
-                  <div key={expense.id} className="flex justify-between items-center p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
-                    <div className="flex-1">
-                      <p className="text-sm text-white font-medium">{expense.description}</p>
-                      <p className="text-xs text-muted-foreground">{format(new Date(expense.date), 'dd MMM yyyy, HH:mm')}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-orange-500">-${expense.amount.toFixed(2)}</p>
-                      <span className="text-xs text-muted-foreground bg-white/5 px-2 py-1 rounded capitalize">
-                        {expense.type}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
     </motion.div>
   );
 }

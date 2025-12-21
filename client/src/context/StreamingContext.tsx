@@ -50,9 +50,22 @@ export interface Expense {
   id: string;
   description: string;
   amount: number;
-  type: 'renovación' | 'otro';
+  type: 'ganancia' | 'gasto';
+  profileId?: string;
   accountId?: string;
   date: string;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  channel: 'whatsapp' | 'telegram';
+  daysBeforeExpiry: 1 | 3;
+  notificationTime: string;
+}
+
+export interface AppSettings {
+  defaultCurrency: string;
+  notifications: NotificationSettings;
 }
 
 interface StreamingContextType {
@@ -60,16 +73,20 @@ interface StreamingContextType {
   clients: Client[];
   expenses: Expense[];
   services: Service[];
+  settings: AppSettings;
   addAccount: (account: Omit<Account, 'id' | 'status'>) => boolean;
   updateAccount: (id: string, updates: Partial<Account>) => boolean;
   deleteAccount: (id: string) => void;
   sellProfile: (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => boolean;
   renewProfile: (accountId: string, profileId: string, renewalPrice: number) => boolean;
   renewAccount: (accountId: string) => boolean;
+  updateProfile: (accountId: string, profileId: string, updates: Partial<Profile>) => boolean;
   addClient: (client: Omit<Client, 'id'>) => string;
   addExpense: (expense: Omit<Expense, 'id'>) => void;
   addService: (service: Omit<Service, 'id'>) => boolean;
   updateService: (id: string, updates: Partial<Service>) => boolean;
+  updateSettings: (settings: Partial<AppSettings>) => void;
+  getAllProfiles: () => Array<Profile & { accountId: string; accountName: string }>;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
   getServiceColor: (serviceName: string) => string;
 }
@@ -137,19 +154,39 @@ const MOCK_ACCOUNTS: Account[] = [
 const MOCK_EXPENSES: Expense[] = [
   {
     id: 'e1',
-    description: 'Renovación Netflix - Octubre',
-    amount: 15,
-    type: 'renovación',
+    description: 'Venta de perfil Familia',
+    amount: 5,
+    type: 'ganancia',
+    profileId: 'p1',
     accountId: 'a1',
     date: subDays(new Date(), 5).toISOString()
+  },
+  {
+    id: 'e2',
+    description: 'Renovación Netflix',
+    amount: 15,
+    type: 'gasto',
+    accountId: 'a1',
+    date: subDays(new Date(), 3).toISOString()
   }
 ];
+
+const DEFAULT_SETTINGS: AppSettings = {
+  defaultCurrency: 'USD',
+  notifications: {
+    enabled: true,
+    channel: 'whatsapp',
+    daysBeforeExpiry: 3,
+    notificationTime: '09:00'
+  }
+};
 
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
   const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
     const service = services.find(s => s.name === newAccount.serviceName);
@@ -249,6 +286,14 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     });
 
     setAccounts(updatedAccounts);
+    addExpense({
+      description: `Venta de perfil ${clientData.name}`,
+      amount: clientData.price,
+      type: 'ganancia',
+      profileId,
+      accountId,
+      date: new Date().toISOString()
+    });
     toast.success(`Perfil vendido a ${clientData.name}`);
     return true;
   };
@@ -283,9 +328,10 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
     setAccounts(updatedAccounts);
     addExpense({
-      description: `Renovación ${profile.name}`,
+      description: `Renovación ${profile.name} - ${account.serviceName}`,
       amount: renewalPrice,
-      type: 'renovación',
+      type: 'ganancia',
+      profileId,
       accountId,
       date: new Date().toISOString()
     });
@@ -313,9 +359,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
     setAccounts(updatedAccounts);
     addExpense({
-      description: `Renovación ${account.serviceName}`,
+      description: `Renovación cuenta ${account.serviceName}`,
       amount: account.cost,
-      type: 'renovación',
+      type: 'gasto',
       accountId,
       date: new Date().toISOString()
     });
@@ -324,24 +370,56 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return true;
   };
 
+  const updateProfile = (accountId: string, profileId: string, updates: Partial<Profile>) => {
+    const updatedAccounts = accounts.map(acc => {
+      if (acc.id !== accountId) return acc;
+      return {
+        ...acc,
+        profiles: acc.profiles.map(p => (p.id === profileId ? { ...p, ...updates } : p))
+      };
+    });
+    setAccounts(updatedAccounts);
+    toast.success('Perfil actualizado');
+    return true;
+  };
+
+  const updateSettings = (newSettings: Partial<AppSettings>) => {
+    setSettings({ ...settings, ...newSettings });
+  };
+
+  const getAllProfiles = () => {
+    const allProfiles: Array<Profile & { accountId: string; accountName: string }> = [];
+    accounts.forEach(account => {
+      account.profiles.forEach(profile => {
+        if (profile.status !== 'disponible') {
+          allProfiles.push({
+            ...profile,
+            accountId: account.id,
+            accountName: account.serviceName
+          });
+        }
+      });
+    });
+    return allProfiles;
+  };
+
   const getStats = () => {
     let totalSales = 0;
     let totalExpenses = 0;
     let activeAccounts = 0;
     let expiringSoon = 0;
 
-    accounts.forEach(acc => {
-      const activeProfiles = acc.profiles.filter(p => p.status === 'activo');
-      activeProfiles.forEach(profile => {
-        totalSales += profile.price || acc.pricePerProfile;
-      });
-
-      if (acc.status === 'activa') activeAccounts++;
-      if (acc.status === 'por vencer') expiringSoon++;
+    expenses.forEach(exp => {
+      if (exp.type === 'ganancia') {
+        totalSales += exp.amount;
+      } else {
+        totalExpenses += exp.amount;
+      }
     });
 
-    expenses.forEach(exp => {
-      totalExpenses += exp.amount;
+    accounts.forEach(acc => {
+      if (acc.status === 'activa') activeAccounts++;
+      if (acc.status === 'por vencer') expiringSoon++;
     });
 
     return {
@@ -364,16 +442,20 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       clients, 
       expenses,
       services,
+      settings,
       addAccount, 
       updateAccount, 
       deleteAccount, 
       sellProfile,
       renewProfile,
       renewAccount,
+      updateProfile,
       addClient,
       addExpense,
       addService,
       updateService,
+      updateSettings,
+      getAllProfiles,
       getStats,
       getServiceColor
     }}>

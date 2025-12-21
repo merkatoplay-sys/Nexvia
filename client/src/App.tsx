@@ -7,6 +7,8 @@ import AccountDetail from "@/pages/AccountDetail";
 import Sales from "@/pages/Sales";
 import Finances from "@/pages/Finances";
 import Services from "@/pages/Services";
+import Profiles from "@/pages/Profiles";
+import Settings from "@/pages/Settings";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 
@@ -18,10 +20,10 @@ function Router() {
         <Route path="/accounts" component={Accounts} />
         <Route path="/account/:id" component={AccountDetail} />
         <Route path="/sales" component={Sales} />
+        <Route path="/profiles" component={Profiles} />
         <Route path="/finances" component={Finances} />
         <Route path="/services" component={Services} />
-        <Route path="/clients" component={() => <div className="text-white">Módulo de Clientes (Próximamente)</div>} />
-        <Route path="/settings" component={() => <div className="text-white">Configuración (Próximamente)</div>} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
