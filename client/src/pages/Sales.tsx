@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Plus, ShoppingCart, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Sales() {
@@ -21,7 +21,8 @@ export default function Sales() {
     phone: '',
     pin: '',
     price: 0,
-    endDate: ''
+    startDate: format(new Date(), 'yyyy-MM-dd'),
+    endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd')
   });
 
   const filteredAccounts = selectedService 
@@ -32,7 +33,7 @@ export default function Sales() {
   const availableProfiles = selectedAccount?.profiles.filter(p => p.status === 'disponible') || [];
 
   const handleSellProfile = () => {
-    if (!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate) {
+    if (!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate || !saleData.startDate) {
       return;
     }
 
@@ -41,12 +42,13 @@ export default function Sales() {
       phone: saleData.phone,
       pin: saleData.pin,
       price: Number(saleData.price),
-      endDate: saleData.endDate
+      startDate: saleData.startDate + 'T00:00:00Z',
+      endDate: saleData.endDate + 'T00:00:00Z'
     });
 
     if (success) {
       setIsSellDialogOpen(false);
-      setSaleData({ name: '', phone: '', pin: '', price: 0, endDate: '' });
+      setSaleData({ name: '', phone: '', pin: '', price: 0, startDate: format(new Date(), 'yyyy-MM-dd'), endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd') });
       setSelectedAccountId('');
       setSelectedProfileId('');
     }
@@ -156,14 +158,24 @@ export default function Sales() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Precio ($)</label>
+                <Input 
+                  type="number" 
+                  className="glass-input" 
+                  value={saleData.price} 
+                  onChange={e => setSaleData({...saleData, price: parseFloat(e.target.value)})}
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Precio ($)</label>
+                  <label className="text-xs text-muted-foreground">Fecha de Inicio</label>
                   <Input 
-                    type="number" 
+                    type="date" 
                     className="glass-input" 
-                    value={saleData.price} 
-                    onChange={e => setSaleData({...saleData, price: parseFloat(e.target.value)})}
+                    value={saleData.startDate} 
+                    onChange={e => setSaleData({...saleData, startDate: e.target.value})}
                   />
                 </div>
                 <div className="space-y-2">
@@ -179,7 +191,7 @@ export default function Sales() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsSellDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleSellProfile} className="bg-primary text-white" disabled={!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate}>
+              <Button onClick={handleSellProfile} className="bg-primary text-white" disabled={!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate || !saleData.startDate}>
                 Confirmar Venta
               </Button>
             </DialogFooter>

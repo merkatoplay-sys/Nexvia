@@ -1,0 +1,71 @@
+Quiero realizar una reestructuración y ampliación de funcionalidades en mi aplicación de gestión de streaming. Todo debe mantenerse en español.
+
+1. DASHBOARD:
+- Quita la opción de “Agregar servicio”.
+- Agrega una acción principal llamada “Hacer venta”.
+- Agrega botones de “Renovar” visibles en el dashboard.
+- Cuando se presione “Renovar”:
+  - Si es una cuenta maestra, debe registrarse como un gasto.
+  - Si es un perfil, debe registrarse como una ganancia.
+- El dashboard debe mostrar claramente qué cuentas maestras y qué perfiles están por vencer.
+
+2. VENTAS:
+- Implementa un flujo de “Hacer venta” donde:
+  - Se pueda seleccionar primero el servicio.
+  - Luego elegir una cuenta maestra que tenga perfiles disponibles.
+  - Mostrar cuántos perfiles libres tiene cada cuenta.
+  - Elegir el perfil específico.
+  - Registrar cliente, PIN (opcional), fecha de inicio y fecha de vencimiento.
+  - Registrar el precio como ganancia.
+
+3. SERVICIOS (nuevo módulo):
+- Agrega un apartado “Servicios”.
+- Permite crear, editar y listar servicios.
+- Cada servicio debe tener:
+  - Nombre
+  - Color identificador
+  - Máximo de perfiles
+- Agrega servicios predefinidos:
+  Netflix (rojo),
+  Spotify (verde),
+  Disney+,
+  Prime Video,
+  HBO,
+  Crunchyroll,
+  Vix.
+- Permite editar los colores de los servicios.
+
+4. PERFILES (nuevo módulo):
+- Agrega un apartado “Perfiles”.
+- Desde ahí se debe poder:
+  - Editar nombre del perfil
+  - Editar PIN
+  - Cambiar cliente asignado
+  - Ver a qué cuenta maestra pertenece
+  - Ver y gestionar renovaciones del perfil
+
+5. RENOVACIONES:
+- Permite renovar perfiles individualmente.
+- Al renovar un perfil:
+  - Se extiende la fecha de vencimiento.
+  - Se registra como ganancia.
+  - Debe mostrarse en qué cuenta maestra está ese perfil.
+- Permite renovar cuentas maestras:
+  - Se extiende la fecha de vencimiento.
+  - Se registra como gasto.
+
+6. FINANZAS:
+- Mantén un historial claro de:
+  - Ganancias (ventas y renovaciones de perfiles)
+  - Gastos (renovaciones de cuentas maestras)
+- Diferencia claramente entre ingresos y egresos.
+
+7. CONFIGURACIÓN:
+- Agrega un apartado de notificaciones:
+  - Activar o desactivar notificaciones
+  - Elegir canal: WhatsApp o Telegram
+  - Elegir cuántos días antes avisar (1 o 3 días)
+  - Elegir la hora del aviso
+- Agrega preferencias generales como moneda por defecto.
+
+Asegúrate de que todo esté bien integrado con la estructura actual de la app, usando los contextos existentes, manteniendo la experiencia visual y sin romper funcionalidades ya implementadas.
