@@ -81,7 +81,7 @@ export default function Sales() {
                     <SelectValue placeholder="Selecciona un servicio" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
-                    {Array.from(new Set(accounts.map(a => a.serviceName))).map(service => (
+                    {Array.from(new Set(accounts.map(a => a.serviceName).filter(s => s && s.trim()))).map(service => (
                       <SelectItem key={service} value={service}>{service}</SelectItem>
                     ))}
                   </SelectContent>
