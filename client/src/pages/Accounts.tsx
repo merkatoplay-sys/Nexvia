@@ -120,6 +120,10 @@ export default function Accounts() {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddServiceOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
                 <Button onClick={() => {
+                  if (!newService.name.trim()) {
+                    alert('Por favor ingresa un nombre para el servicio');
+                    return;
+                  }
                   if (addService({ name: newService.name, color: newService.color, maxProfiles: newService.maxProfiles, isCustom: true })) {
                     setIsAddServiceOpen(false);
                     setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
