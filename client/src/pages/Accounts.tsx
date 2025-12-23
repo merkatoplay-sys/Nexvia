@@ -11,13 +11,9 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, services, addService } = useStreaming();
+  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, services, updateProfile } = useStreaming();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
-  const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
-  const [newService, setNewService] = useState({ name: '', color: '#7B68EE', maxProfiles: 7 });
-  
-  // New Account Form State
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     serviceName: 'Netflix',
@@ -34,7 +30,6 @@ export default function Accounts() {
   });
 
   const handleAddAccount = () => {
-    // Basic validation
     if (!newAccount.email || !newAccount.cost) return;
 
     const profiles = Array.from({ length: newAccount.totalProfiles || 5 }, (_, i) => ({
@@ -69,76 +64,12 @@ export default function Accounts() {
           <p className="text-muted-foreground">Gestiona tus suscripciones y distribuye perfiles.</p>
         </div>
         
-        <div className="flex gap-2">
-          <Dialog open={isAddServiceOpen} onOpenChange={setIsAddServiceOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-white/10 hover:bg-white/5 text-white">
-                <Plus className="mr-2 h-4 w-4" /> Nuevo Servicio
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
-              <DialogHeader>
-                <DialogTitle>Crear Servicio Personalizado</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Nombre del Servicio</label>
-                  <Input 
-                    className="glass-input" 
-                    placeholder="Mi Servicio"
-                    value={newService.name} 
-                    onChange={e => setNewService({...newService, name: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Color</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="color" 
-                      value={newService.color}
-                      onChange={e => setNewService({...newService, color: e.target.value})}
-                      className="w-12 h-10 rounded cursor-pointer"
-                    />
-                    <Input 
-                      className="glass-input" 
-                      placeholder="#7B68EE"
-                      value={newService.color} 
-                      onChange={e => setNewService({...newService, color: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Máximo de Perfiles</label>
-                  <Input 
-                    type="number" 
-                    className="glass-input" 
-                    value={newService.maxProfiles} 
-                    onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value)})}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddServiceOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-                <Button onClick={() => {
-                  if (!newService.name.trim()) {
-                    alert('Por favor ingresa un nombre para el servicio');
-                    return;
-                  }
-                  if (addService({ name: newService.name, color: newService.color, maxProfiles: newService.maxProfiles, isCustom: true })) {
-                    setIsAddServiceOpen(false);
-                    setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
-                  }
-                }} className="bg-primary text-white">Crear Servicio</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
-                <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
-              </Button>
-            </DialogTrigger>
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
+              <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
+            </Button>
+          </DialogTrigger>
           <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
             <DialogHeader>
               <DialogTitle>Registrar Nueva Cuenta</DialogTitle>
@@ -185,7 +116,7 @@ export default function Accounts() {
                 />
               </div>
 
-               <div className="space-y-2">
+              <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Contraseña</label>
                 <Input 
                   className="glass-input" 
@@ -222,11 +153,9 @@ export default function Accounts() {
               <Button onClick={handleAddAccount} className="bg-primary text-white">Guardar Cuenta</Button>
             </DialogFooter>
           </DialogContent>
-          </Dialog>
-        </div>
+        </Dialog>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-4 items-center bg-card/40 p-4 rounded-lg border border-white/5 backdrop-blur-sm">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -243,14 +172,13 @@ export default function Accounts() {
           </SelectTrigger>
           <SelectContent className="bg-popover border-white/10 text-white">
             <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="Netflix">Netflix</SelectItem>
-            <SelectItem value="Spotify">Spotify</SelectItem>
-            <SelectItem value="Disney+">Disney+</SelectItem>
+            {services.map(s => (
+              <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Grid */}
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {filteredAccounts.map((account) => {
           const daysLeft = differenceInDays(new Date(account.expirationDate), new Date());
@@ -305,24 +233,20 @@ export default function Accounts() {
                           </span>
                         </div>
                         
-                        {profile.status === 'activo' ? (
-                          <div className="flex gap-2">
-                            {profile.endDate && differenceInDays(new Date(profile.endDate), new Date()) <= 1 && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 text-[10px] bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
-                                onClick={() => renewProfile(account.id, profile.id, profile.price || account.pricePerProfile)}
-                              >
-                                <RotateCw className="h-3 w-3" />
-                              </Button>
-                            )}
-                            <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
-                              {profile.phone ? profile.phone.substring(0, 10) : 'Ocupado'}
-                            </span>
+                        {profile.status === 'activo' && (
+                          <div className="flex gap-1 opacity-0 group-hover/profile:opacity-100 transition-opacity">
+                            <Button 
+                              size="sm" 
+                              variant="ghost" 
+                              className="h-5 px-2 bg-primary/20 hover:bg-primary/30 text-primary text-xs"
+                              onClick={() => {
+                                const newName = prompt('Nuevo nombre:', profile.name);
+                                if (newName) updateProfile(account.id, profile.id, { name: newName });
+                              }}
+                            >
+                              Editar
+                            </Button>
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground italic">Disponible</span>
                         )}
                       </div>
                     ))}
