@@ -437,6 +437,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return service?.color || '#7B68EE';
   };
 
+  const getMaxProfilesByService = (serviceName: ServiceType): number => {
+    const service = services.find(s => s.name === serviceName);
+    return service?.maxProfiles || 7;
+  };
+
   return (
     <StreamingContext.Provider value={{ 
       accounts, 
@@ -458,7 +463,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       updateSettings,
       getAllProfiles,
       getStats,
-      getServiceColor
+      getServiceColor,
+      getMaxProfilesByService
     }}>
       {children}
     </StreamingContext.Provider>
