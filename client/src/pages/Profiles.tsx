@@ -11,21 +11,22 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Profiles() {
-  const { getAllProfiles, accounts, clients, updateProfile, renewProfile, getServiceColor } = useStreaming();
+  const { getAllProfiles, accounts, clients, updateProfile, renewProfile, getServiceColor, deleteProfile } = useStreaming();
   const allProfiles = getAllProfiles();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState({ name: '', pin: '', clientId: '' });
+  const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '' });
 
   const handleEdit = (profile: any) => {
     setEditingId(profile.id + profile.accountId);
-    setEditData({ name: profile.name, pin: profile.pin || '', clientId: profile.clientId || '' });
+    setEditData({ name: profile.name, pin: profile.pin || '', clientId: profile.clientId || '', phone: profile.phone || '' });
   };
 
   const handleSave = (accountId: string, profileId: string) => {
     updateProfile(accountId, profileId, {
       name: editData.name,
       pin: editData.pin || undefined,
-      clientId: editData.clientId || undefined
+      clientId: editData.clientId || undefined,
+      phone: editData.phone || undefined
     });
     setEditingId(null);
   };
@@ -103,20 +104,36 @@ export default function Profiles() {
                         </div>
 
                         {editingId === `${profile.id}${profile.accountId}` ? (
-                          <div className="space-y-2">
-                            <label className="text-xs text-muted-foreground">PIN</label>
-                            <Input
-                              className="glass-input"
-                              placeholder="Dejar en blanco para no cambiar"
-                              value={editData.pin}
-                              onChange={e => setEditData({...editData, pin: e.target.value})}
-                            />
-                          </div>
+                          <>
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">Teléfono</label>
+                              <Input
+                                className="glass-input"
+                                value={editData.phone}
+                                onChange={e => setEditData({...editData, phone: e.target.value})}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">PIN</label>
+                              <Input
+                                className="glass-input"
+                                placeholder="Dejar en blanco para no cambiar"
+                                value={editData.pin}
+                                onChange={e => setEditData({...editData, pin: e.target.value})}
+                              />
+                            </div>
+                          </>
                         ) : (
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">PIN</p>
-                            <p className="text-sm text-white">{profile.pin ? '••••' : 'No configurado'}</p>
-                          </div>
+                          <>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Teléfono</p>
+                              <p className="text-sm text-white">{editData.phone || profile.phone || 'No especificado'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">PIN</p>
+                              <p className="text-sm text-white">{profile.pin ? '••••' : 'No configurado'}</p>
+                            </div>
+                          </>
                         )}
                       </div>
 
@@ -210,6 +227,16 @@ export default function Profiles() {
                               <RotateCw className="h-3 w-3 mr-1" /> Renovar
                             </Button>
                           )}
+                          <Button
+                            onClick={() => {
+                              if (confirm(`¿Eliminar perfil ${profile.name}?`)) {
+                                deleteProfile(profile.accountId as string, profile.id);
+                              }
+                            }}
+                            className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-sm"
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                          </Button>
                         </>
                       )}
                     </div>

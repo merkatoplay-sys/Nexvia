@@ -90,6 +90,8 @@ interface StreamingContextType {
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
   getServiceColor: (serviceName: string) => string;
   getMaxProfilesByService: (serviceName: ServiceType) => number;
+  deleteService: (id: string) => void;
+  deleteProfile: (accountId: string, profileId: string) => void;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);
@@ -446,6 +448,23 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return service?.maxProfiles || 7;
   };
 
+  const deleteService = (id: string) => {
+    setServices(services.filter(s => s.id !== id));
+    toast.success('Servicio eliminado');
+  };
+
+  const deleteProfile = (accountId: string, profileId: string) => {
+    const updatedAccounts = accounts.map(acc => {
+      if (acc.id !== accountId) return acc;
+      return {
+        ...acc,
+        profiles: acc.profiles.filter(p => p.id !== profileId)
+      };
+    });
+    setAccounts(updatedAccounts);
+    toast.success('Perfil eliminado');
+  };
+
   return (
     <StreamingContext.Provider value={{ 
       accounts, 
@@ -468,7 +487,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       getAllProfiles,
       getStats,
       getServiceColor,
-      getMaxProfilesByService
+      getMaxProfilesByService,
+      deleteService,
+      deleteProfile
     }}>
       {children}
     </StreamingContext.Provider>

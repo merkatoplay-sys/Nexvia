@@ -168,6 +168,11 @@ export default function Settings() {
                 <SelectItem value="MXN">MXN - Peso Mexicano</SelectItem>
                 <SelectItem value="ARS">ARS - Peso Argentino</SelectItem>
                 <SelectItem value="COP">COP - Peso Colombiano</SelectItem>
+                <SelectItem value="GTQ">GTQ - Quetzales (Guatemala)</SelectItem>
+                <SelectItem value="CLP">CLP - Peso Chileno</SelectItem>
+                <SelectItem value="PEN">PEN - Sol (Perú)</SelectItem>
+                <SelectItem value="BOB">BOB - Boliviano</SelectItem>
+                <SelectItem value="VES">VES - Bolívar (Venezuela)</SelectItem>
               </SelectContent>
             </Select>
           </div>

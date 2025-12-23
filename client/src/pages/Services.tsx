@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 
 export default function Services() {
-  const { services, addService, updateService } = useStreaming();
+  const { services, addService, updateService, deleteService } = useStreaming();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newService, setNewService] = useState({ name: '', color: '#7B68EE', maxProfiles: 7 });
@@ -199,6 +199,18 @@ export default function Services() {
                           </DialogFooter>
                         </DialogContent>
                       </Dialog>
+                      <Button 
+                        size="sm" 
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm(`¿Eliminar servicio ${service.name}?`)) {
+                            deleteService(service.id);
+                          }
+                        }}
+                        className="flex-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                      </Button>
                     </div>
                   )}
                 </div>
