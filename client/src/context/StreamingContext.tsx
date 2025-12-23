@@ -228,6 +228,10 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addService = (service: Omit<Service, 'id'>) => {
+    if (!service.name || !service.name.trim()) {
+      toast.error('El nombre del servicio no puede estar vacío');
+      return false;
+    }
     if (services.some(s => s.name === service.name)) {
       toast.error('Este servicio ya existe');
       return false;
