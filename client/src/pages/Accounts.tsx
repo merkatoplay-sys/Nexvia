@@ -155,7 +155,7 @@ export default function Accounts() {
                       <SelectValue placeholder="Servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {services.map(s => (
+                      {services.filter(s => s.name && s.name.trim()).map(s => (
                         <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>

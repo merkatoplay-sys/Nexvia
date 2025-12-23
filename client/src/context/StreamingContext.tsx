@@ -186,7 +186,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
-  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES);
+  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES.filter(s => s.name && s.name.trim()));
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
