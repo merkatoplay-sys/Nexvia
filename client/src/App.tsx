@@ -6,6 +6,7 @@ import Accounts from "@/pages/Accounts";
 import AccountDetail from "@/pages/AccountDetail";
 import Sales from "@/pages/Sales";
 import Finances from "@/pages/Finances";
+import Renovaciones from "@/pages/Renovaciones";
 import Services from "@/pages/Services";
 import Profiles from "@/pages/Profiles";
 import Settings from "@/pages/Settings";
@@ -22,6 +23,7 @@ function Router() {
         <Route path="/sales" component={Sales} />
         <Route path="/profiles" component={Profiles} />
         <Route path="/finances" component={Finances} />
+        <Route path="/renovaciones" component={Renovaciones} />
         <Route path="/services" component={Services} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />

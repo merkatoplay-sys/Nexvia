@@ -1,44 +1,16 @@
 import { useStreaming } from '@/context/StreamingContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Plus, TrendingUp, TrendingDown, DollarSign, PieChart, RotateCw } from 'lucide-react';
-import { useState } from 'react';
+import { TrendingUp, TrendingDown, DollarSign, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Finances() {
-  const { accounts, expenses, addExpense, renewAccount, getStats } = useStreaming();
+  const { expenses, getStats } = useStreaming();
   const stats = getStats();
-  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false);
-  const [isRenewDialogOpen, setIsRenewDialogOpen] = useState(false);
-  const [selectedAccountToRenew, setSelectedAccountToRenew] = useState<string>('');
-  const [expenseData, setExpenseData] = useState({
-    description: '',
-    amount: 0,
-    type: 'gasto' as 'ganancia' | 'gasto'
-  });
-
-  const handleAddExpense = () => {
-    if (!expenseData.description || !expenseData.amount) {
-      return;
-    }
-
-    addExpense({
-      description: expenseData.description,
-      amount: Number(expenseData.amount),
-      type: expenseData.type,
-      date: new Date().toISOString()
-    });
-
-    setIsExpenseDialogOpen(false);
-    setExpenseData({ description: '', amount: 0, type: 'gasto' });
-  };
 
   const ganancias = expenses.filter(e => e.type === 'ganancia').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const gastos = expenses.filter(e => e.type === 'gasto').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const ajustes = expenses.filter(e => e.type === 'ajuste').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const container = {
     hidden: { opacity: 0 },
@@ -60,117 +32,9 @@ export default function Finances() {
       animate="show"
       className="space-y-8"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-white mb-2">Finanzas</h1>
-          <p className="text-muted-foreground">Ingresos, gastos y ganancias netas.</p>
-        </div>
-        
-        <div className="flex gap-2">
-          <Dialog open={isRenewDialogOpen} onOpenChange={setIsRenewDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-secondary hover:bg-secondary/90 text-black">
-                <RotateCw className="mr-2 h-4 w-4" /> Renovar Cuenta
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
-              <DialogHeader>
-                <DialogTitle>Renovar Cuenta Maestra</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Selecciona la cuenta</label>
-                  <Select value={selectedAccountToRenew} onValueChange={setSelectedAccountToRenew}>
-                    <SelectTrigger className="glass-input">
-                      <SelectValue placeholder="Elige una cuenta" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border-white/10 text-white">
-                      {accounts.map(acc => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.serviceName} - ${acc.cost}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {selectedAccountToRenew && (
-                  <div className="bg-white/5 p-3 rounded-lg border border-white/10">
-                    <p className="text-sm text-muted-foreground">Costo de renovación:</p>
-                    <p className="text-xl font-bold text-secondary">
-                      ${accounts.find(a => a.id === selectedAccountToRenew)?.cost || 0}
-                    </p>
-                  </div>
-                )}
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsRenewDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-                <Button 
-                  onClick={() => {
-                    if (selectedAccountToRenew) {
-                      renewAccount(selectedAccountToRenew);
-                      setIsRenewDialogOpen(false);
-                      setSelectedAccountToRenew('');
-                    }
-                  }} 
-                  className="bg-secondary text-black"
-                >
-                  Renovar Cuenta
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-destructive hover:bg-destructive/90 text-white">
-                <Plus className="mr-2 h-4 w-4" /> Registrar Gasto
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Registrar Gasto</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Descripción</label>
-                  <Input 
-                    className="glass-input" 
-                    placeholder="Ej: Renovación adicional"
-                    value={expenseData.description} 
-                    onChange={e => setExpenseData({...expenseData, description: e.target.value})}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Monto</label>
-                    <Input 
-                      type="number" 
-                      className="glass-input" 
-                      value={expenseData.amount} 
-                      onChange={e => setExpenseData({...expenseData, amount: parseFloat(e.target.value) || 0})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Tipo</label>
-                    <Select value={expenseData.type} onValueChange={val => setExpenseData({...expenseData, type: val as 'ganancia' | 'gasto'})}>
-                      <SelectTrigger className="glass-input">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover border-white/10 text-white">
-                        <SelectItem value="gasto">Gasto</SelectItem>
-                        <SelectItem value="ganancia">Ganancia</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsExpenseDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-                <Button onClick={handleAddExpense} className="bg-primary text-white">Registrar</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+      <div>
+        <h1 className="text-3xl font-display font-bold text-white mb-2">Finanzas</h1>
+        <p className="text-muted-foreground">Historial completo de movimientos contables: ganancias, gastos y ajustes.</p>
       </div>
 
       {/* KPIs */}
@@ -219,8 +83,26 @@ export default function Finances() {
         </motion.div>
       </div>
 
+      {/* Información de renovaciones */}
+      <Card className="glass-card border-blue-500/20 bg-blue-500/5">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-blue-400" /> Gestionar Movimientos
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">Para registrar renovaciones, devoluciones y ajustes, ve a la sección <strong className="text-primary">Renovaciones y Ajustes</strong>.</p>
+          <p className="text-xs text-muted-foreground">Desde ahí puedes:</p>
+          <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-3 list-disc">
+            <li>Renovar cuentas maestras (se registran como GASTOS)</li>
+            <li>Renovar perfiles vendidos (se registran como GANANCIAS)</li>
+            <li>Procesar devoluciones (se registran como GASTOS)</li>
+          </ul>
+        </CardContent>
+      </Card>
+
       {/* Historial de Ganancias y Gastos */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3">
         <motion.div variants={item}>
           <Card className="glass-card">
             <CardHeader>
@@ -270,6 +152,36 @@ export default function Finances() {
                           <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'dd MMM yyyy HH:mm')}</p>
                         </div>
                         <p className="text-sm font-bold text-red-400">-${exp.amount}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={item}>
+          <Card className="glass-card">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-400" /> Ajustes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {ajustes.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">Sin ajustes registrados</p>
+                ) : (
+                  ajustes.map(exp => (
+                    <div key={exp.id} className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-white">{exp.description}</p>
+                          <p className="text-xs text-muted-foreground">{format(new Date(exp.date), 'dd MMM yyyy HH:mm')}</p>
+                          {exp.reference && <p className="text-xs text-muted-foreground">Ref: {exp.reference}</p>}
+                        </div>
+                        <p className="text-sm font-bold text-amber-400">${exp.amount}</p>
                       </div>
                     </div>
                   ))
