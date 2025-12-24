@@ -59,8 +59,11 @@ export interface Expense {
 export interface NotificationSettings {
   enabled: boolean;
   channel: 'whatsapp' | 'telegram';
-  daysBeforeExpiry: 1 | 3;
+  daysBeforeExpiry: 1 | 2 | 3;
   notificationTime: string;
+  telegramBotToken?: string;
+  telegramChatId?: string;
+  whatsappPhoneNumber?: string;
 }
 
 export interface AppSettings {
@@ -92,6 +95,7 @@ interface StreamingContextType {
   getMaxProfilesByService: (serviceName: ServiceType) => number;
   deleteService: (id: string) => void;
   deleteProfile: (accountId: string, profileId: string) => void;
+  sendTelegramTestNotification: (botToken: string, chatId: string) => Promise<boolean>;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);
@@ -178,9 +182,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultCurrency: 'USD',
   notifications: {
     enabled: true,
-    channel: 'whatsapp',
+    channel: 'telegram',
     daysBeforeExpiry: 3,
-    notificationTime: '09:00'
+    notificationTime: '09:00',
+    telegramBotToken: '',
+    telegramChatId: '',
+    whatsappPhoneNumber: ''
   }
 };
 
@@ -476,6 +483,32 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     toast.success('Perfil eliminado');
   };
 
+  const sendTelegramTestNotification = async (botToken: string, chatId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: '✅ Notificación de prueba desde Streaming Manager\n\nSi ves este mensaje, tu configuración de Telegram es correcta.',
+          parse_mode: 'HTML'
+        })
+      });
+      
+      if (response.ok) {
+        toast.success('Notificación de prueba enviada a Telegram');
+        return true;
+      } else {
+        const error = await response.json();
+        toast.error(`Error: ${error.description || 'No se pudo enviar la notificación'}`);
+        return false;
+      }
+    } catch (error) {
+      toast.error('Error al conectar con Telegram');
+      return false;
+    }
+  };
+
   return (
     <StreamingContext.Provider value={{ 
       accounts, 
@@ -500,7 +533,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       getServiceColor,
       getMaxProfilesByService,
       deleteService,
-      deleteProfile
+      deleteProfile,
+      sendTelegramTestNotification
     }}>
       {children}
     </StreamingContext.Provider>
