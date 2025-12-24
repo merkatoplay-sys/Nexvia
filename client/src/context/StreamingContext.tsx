@@ -215,7 +215,18 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const deleteAccount = (id: string) => {
+    const accountToDelete = accounts.find(a => a.id === id);
+    if (!accountToDelete) {
+      toast.error('Cuenta no encontrada');
+      return;
+    }
+    
     setAccounts(accounts.filter(acc => acc.id !== id));
+    
+    const profileIds = accountToDelete.profiles.map(p => p.id);
+    setExpenses(expenses.filter(e => !profileIds.includes(e.profileId || '')));
+    
+    toast.success('Cuenta maestra y sus perfiles eliminados');
   };
 
   const addClient = (client: Omit<Client, 'id'>) => {
