@@ -11,10 +11,12 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, services, updateProfile } = useStreaming();
+  const { accounts, addAccount, clients, sellProfile, renewProfile, getMaxProfilesByService, services, updateProfile, deleteAccount } = useStreaming();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: any } | null>(null);
+  const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     serviceName: 'Netflix',
     totalProfiles: 5,
@@ -208,6 +210,19 @@ export default function Accounts() {
                     <Badge variant={daysLeft < 3 ? "destructive" : "default"} className={`${daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}`}>
                       {daysLeft} días
                     </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (confirm(`¿Eliminar la cuenta ${account.serviceName} (${account.email}) y todos sus perfiles? Esta acción no se puede deshacer.`)) {
+                          deleteAccount(account.id);
+                        }
+                      }}
+                      className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-xs ml-2"
+                    >
+                      Eliminar Cuenta
+                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4">
@@ -225,29 +240,28 @@ export default function Accounts() {
                   <div className="space-y-2">
                     <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Perfiles</h4>
                     {account.profiles.map((profile) => (
-                      <div key={profile.id} className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm group/profile">
+                      <div 
+                        key={profile.id} 
+                        className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm group/profile cursor-pointer"
+                        onClick={() => {
+                          if (profile.status === 'activo') {
+                            setEditingProfile({ accountId: account.id, profile });
+                            setEditData({ 
+                              name: profile.name, 
+                              pin: profile.pin || '', 
+                              clientId: profile.clientId || '', 
+                              phone: profile.phone || '',
+                              price: profile.price || 0
+                            });
+                          }
+                        }}
+                      >
                         <div className="flex items-center gap-2">
                           <User className={`h-3 w-3 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
                           <span className={`${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
                             {profile.name}
                           </span>
                         </div>
-                        
-                        {profile.status === 'activo' && (
-                          <div className="flex gap-1 opacity-0 group-hover/profile:opacity-100 transition-opacity">
-                            <Button 
-                              size="sm" 
-                              variant="ghost" 
-                              className="h-5 px-2 bg-primary/20 hover:bg-primary/30 text-primary text-xs"
-                              onClick={() => {
-                                const newName = prompt('Nuevo nombre:', profile.name);
-                                if (newName) updateProfile(account.id, profile.id, { name: newName });
-                              }}
-                            >
-                              Editar
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -257,6 +271,48 @@ export default function Accounts() {
           );
         })}
       </div>
+
+      {editingProfile && (
+        <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Editar Perfil: {editingProfile.profile.name}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Nombre</label>
+                <Input className="glass-input" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Teléfono</label>
+                <Input className="glass-input" value={editData.phone} onChange={e => setEditData({...editData, phone: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">PIN</label>
+                <Input className="glass-input" value={editData.pin} onChange={e => setEditData({...editData, pin: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Cliente</label>
+                <Select value={editData.clientId} onValueChange={val => setEditData({...editData, clientId: val})}>
+                  <SelectTrigger className="glass-input"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-popover border-white/10 text-white">
+                    <SelectItem value="">Sin asignar</SelectItem>
+                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Precio</label>
+                <Input type="number" className="glass-input" value={editData.price} onChange={e => setEditData({...editData, price: parseFloat(e.target.value)})} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
+              <Button onClick={() => { updateProfile(editingProfile.accountId, editingProfile.profile.id, { name: editData.name, pin: editData.pin || undefined, clientId: editData.clientId || undefined, phone: editData.phone || undefined, price: editData.price || undefined }); setEditingProfile(null); }} className="bg-primary text-white">Guardar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

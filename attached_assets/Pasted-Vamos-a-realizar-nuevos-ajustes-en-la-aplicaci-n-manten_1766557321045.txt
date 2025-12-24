@@ -1,0 +1,48 @@
+Vamos a realizar nuevos ajustes en la aplicación, manteniendo todo en español y sin romper la estructura existente.
+
+1. SECCIÓN DE PERFILES (ajuste importante):
+- Cambia la vista de la sección de Perfiles.
+- En lugar de mostrar una lista plana de perfiles, muestra primero las cuentas maestras.
+- Al seleccionar o expandir una cuenta maestra, deben mostrarse los perfiles asociados a esa cuenta.
+- Cada perfil debe tener opciones para:
+  - Editar nombre del perfil
+  - Editar PIN
+  - Editar número de teléfono del cliente
+  - Editar precio del perfil
+  - Eliminar el perfil
+- Siempre debe ser visible a qué cuenta maestra pertenece cada perfil.
+- Este enfoque debe facilitar una edición más rápida y clara de los perfiles.
+
+2. EDICIÓN DE PERFILES DESDE CUENTAS:
+- En la sección de Cuentas Maestras, permite que al hacer clic sobre un perfil se abra directamente el modal de edición del perfil.
+- Esto evita tener que ir obligatoriamente a la sección de Perfiles para ediciones rápidas.
+
+3. ELIMINAR CUENTAS MAESTRAS:
+- En la sección de Cuentas Maestras, agrega la opción de eliminar una cuenta maestra.
+- Esta opción debe mostrar una confirmación antes de eliminar.
+- Al eliminar una cuenta maestra:
+  - Se deben eliminar también sus perfiles asociados.
+  - Asegúrate de manejar correctamente los datos relacionados (perfiles, ventas, estados).
+- Esta acción debe estar claramente identificada como una acción destructiva.
+
+4. CONFIGURACIÓN – NOTIFICACIONES:
+- Mejora la sección de Configuración agregando un apartado de Notificaciones.
+- Permite activar o desactivar notificaciones.
+- Permite elegir el canal de notificación: Telegram o WhatsApp.
+- Permite elegir cuántos días antes notificar: 1, 2 o 3 días.
+- Permite elegir la hora de notificación en formato de 12 horas.
+
+5. TELEGRAM:
+- Implementa la estructura real para Telegram:
+  - Campo para ingresar el token del bot.
+  - Campo para ingresar el chat ID o ID de grupo.
+  - Botón para enviar una notificación de prueba.
+- Guarda esta configuración para futuros envíos automáticos.
+
+6. WHATSAPP:
+- Para WhatsApp, deja preparada solo la estructura:
+  - Selección del canal WhatsApp.
+  - Campos de configuración visibles (placeholder).
+- No implementar el envío real todavía, solo dejar el sistema listo para una futura integración con WhatsApp Business API o Twilio.
+
+Asegúrate de que estos cambios se integren correctamente con las secciones existentes de Cuentas, Perfiles, Dashboard y Configuración, manteniendo una experiencia clara, rápida y profesional.
