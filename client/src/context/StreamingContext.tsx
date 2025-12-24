@@ -50,10 +50,12 @@ export interface Expense {
   id: string;
   description: string;
   amount: number;
-  type: 'ganancia' | 'gasto';
+  type: 'ganancia' | 'gasto' | 'ajuste';
   profileId?: string;
   accountId?: string;
   date: string;
+  note?: string;
+  reference?: string;
 }
 
 export interface NotificationSettings {
@@ -96,6 +98,10 @@ interface StreamingContextType {
   deleteService: (id: string) => void;
   deleteProfile: (accountId: string, profileId: string) => void;
   sendTelegramTestNotification: (botToken: string, chatId: string) => Promise<boolean>;
+  renewAccountMaster: (accountId: string, renewalDays: number, cost: number) => boolean;
+  renewProfileSale: (accountId: string, profileId: string, renewalDays: number, cost: number) => boolean;
+  processRefund: (profileId: string, amount: number, reason: string) => boolean;
+  recordAdjustment: (description: string, amount: number, reference: string) => void;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);
@@ -509,6 +515,105 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const renewAccountMaster = (accountId: string, renewalDays: number, cost: number): boolean => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) {
+      toast.error('Cuenta no encontrada');
+      return false;
+    }
+
+    const newExpirationDate = addDays(new Date(account.expirationDate), renewalDays).toISOString();
+    setAccounts(accounts.map(acc => 
+      acc.id === accountId 
+        ? { ...acc, expirationDate: newExpirationDate, status: 'activa' as const }
+        : acc
+    ));
+
+    addExpense({
+      description: `Renovación cuenta maestra ${account.serviceName}`,
+      amount: cost,
+      type: 'gasto',
+      accountId,
+      date: new Date().toISOString(),
+      reference: `RENEW_ACCOUNT_${accountId}`
+    });
+
+    toast.success(`Cuenta ${account.serviceName} renovada por ${renewalDays} días`);
+    return true;
+  };
+
+  const renewProfileSale = (accountId: string, profileId: string, renewalDays: number, cost: number): boolean => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) {
+      toast.error('Cuenta no encontrada');
+      return false;
+    }
+
+    const profile = account.profiles.find(p => p.id === profileId);
+    if (!profile || !profile.endDate) {
+      toast.error('Perfil no encontrado o no tiene fecha de vencimiento');
+      return false;
+    }
+
+    const newEndDate = addDays(new Date(profile.endDate), renewalDays).toISOString();
+    setAccounts(accounts.map(acc => 
+      acc.id === accountId
+        ? {
+            ...acc,
+            profiles: acc.profiles.map(p => 
+              p.id === profileId
+                ? { ...p, endDate: newEndDate, status: 'activo' as const }
+                : p
+            )
+          }
+        : acc
+    ));
+
+    addExpense({
+      description: `Renovación perfil ${profile.name} - ${profile.clientId}`,
+      amount: cost,
+      type: 'ganancia',
+      profileId,
+      accountId,
+      date: new Date().toISOString(),
+      reference: `RENEW_PROFILE_${profileId}`
+    });
+
+    toast.success(`Perfil renovado por ${renewalDays} días`);
+    return true;
+  };
+
+  const processRefund = (profileId: string, amount: number, reason: string): boolean => {
+    if (!profileId || amount <= 0) {
+      toast.error('Datos inválidos para la devolución');
+      return false;
+    }
+
+    addExpense({
+      description: `Devolución: ${reason}`,
+      amount,
+      type: 'gasto',
+      profileId,
+      date: new Date().toISOString(),
+      note: reason,
+      reference: `REFUND_${profileId}`
+    });
+
+    toast.success('Devolución registrada exitosamente');
+    return true;
+  };
+
+  const recordAdjustment = (description: string, amount: number, reference: string): void => {
+    addExpense({
+      description: `Ajuste: ${description}`,
+      amount,
+      type: 'ajuste',
+      date: new Date().toISOString(),
+      reference
+    });
+    toast.success('Ajuste registrado');
+  };
+
   return (
     <StreamingContext.Provider value={{ 
       accounts, 
@@ -534,7 +639,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       getMaxProfilesByService,
       deleteService,
       deleteProfile,
-      sendTelegramTestNotification
+      sendTelegramTestNotification,
+      renewAccountMaster,
+      renewProfileSale,
+      processRefund,
+      recordAdjustment
     }}>
       {children}
     </StreamingContext.Provider>

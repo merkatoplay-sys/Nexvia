@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, Users, CreditCard, Settings, Menu, X, LogOut, MonitorPlay } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Settings, Menu, X, LogOut, MonitorPlay, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     { name: 'Ventas', href: '/sales', icon: Users },
     { name: 'Perfiles', href: '/profiles', icon: Users },
     { name: 'Servicios', href: '/services', icon: CreditCard },
+    { name: 'Renovaciones', href: '/renovaciones', icon: RotateCw },
     { name: 'Finanzas', href: '/finances', icon: CreditCard },
     { name: 'Configuración', href: '/settings', icon: Settings },
   ];
