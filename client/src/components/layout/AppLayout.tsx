@@ -8,6 +8,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const { logout, user } = useStreaming();
+
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Cuentas', href: '/accounts', icon: MonitorPlay },
@@ -63,8 +65,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <div className="p-4 border-t border-white/5">
-            <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+          <div className="p-4 border-t border-white/5 space-y-2">
+            <div className="px-4 py-2 text-xs text-muted-foreground truncate">
+              Sesión: {user?.email}
+            </div>
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={logout}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Cerrar Sesión
             </Button>

@@ -73,7 +73,16 @@ export interface AppSettings {
   notifications: NotificationSettings;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  role: 'admin';
+}
+
 interface StreamingContextType {
+  user: User | null;
+  login: (email: string, password: string) => boolean;
+  logout: () => void;
   accounts: Account[];
   clients: Client[];
   expenses: Expense[];
@@ -198,11 +207,43 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
-  const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
-  const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
-  const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
-  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES.filter(s => s.name && s.name.trim()));
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('stream_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [accounts, setAccounts] = useState<Account[]>(() => {
+    const saved = localStorage.getItem('stream_accounts');
+    return saved ? JSON.parse(saved) : MOCK_ACCOUNTS.map(a => ({ ...a, userId: 'u1' }));
+  });
+  const [clients, setClients] = useState<Client[]>(() => {
+    const saved = localStorage.getItem('stream_clients');
+    return saved ? JSON.parse(saved) : MOCK_CLIENTS.map(c => ({ ...c, userId: 'u1' }));
+  });
+  const [expenses, setExpenses] = useState<Expense[]>(() => {
+    const saved = localStorage.getItem('stream_expenses');
+    return saved ? JSON.parse(saved) : MOCK_EXPENSES.map(e => ({ ...e, userId: 'u1' }));
+  });
+  const [services, setServices] = useState<Service[]>(() => {
+    const saved = localStorage.getItem('stream_services');
+    return saved ? JSON.parse(saved) : DEFAULT_SERVICES.filter(s => s.name && s.name.trim()).map(s => ({ ...s, userId: 'u1' }));
+  });
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  const login = (email: string, password: string) => {
+    // Admin simple por ahora
+    if (email === 'admin@streammgr.com' && password === 'admin123') {
+      const adminUser: User = { id: 'u1', email, role: 'admin' };
+      setUser(adminUser);
+      localStorage.setItem('stream_user', JSON.stringify(adminUser));
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('stream_user');
+  };
 
   const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
     const service = services.find(s => s.name === newAccount.serviceName);
@@ -215,7 +256,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
     const id = Math.random().toString(36).substr(2, 9);
     toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
-    setAccounts([...accounts, { ...newAccount, id, status: 'activa' }]);
+    setAccounts([...accounts, { ...newAccount, id, status: 'activa', userId: user?.id || 'u1' } as Account]);
     return true;
   };
 
@@ -244,13 +285,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const addClient = (client: Omit<Client, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    setClients([...clients, { ...client, id }]);
+    setClients([...clients, { ...client, id, userId: user?.id || 'u1' } as Client]);
     return id;
   };
 
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    setExpenses([...expenses, { ...expense, id }]);
+    setExpenses([...expenses, { ...expense, id, userId: user?.id || 'u1' } as Expense]);
   };
 
   const addService = (service: Omit<Service, 'id'>) => {
@@ -263,7 +304,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
     const id = Math.random().toString(36).substr(2, 9);
-    setServices([...services, { ...service, id }]);
+    setServices([...services, { ...service, id, userId: user?.id || 'u1' } as Service]);
     toast.success(`Servicio "${service.name}" creado exitosamente`);
     return true;
   };
@@ -616,6 +657,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <StreamingContext.Provider value={{ 
+      user,
+      login,
+      logout,
       accounts, 
       clients, 
       expenses,
