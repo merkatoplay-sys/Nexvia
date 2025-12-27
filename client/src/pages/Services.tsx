@@ -10,22 +10,20 @@ import { motion } from 'framer-motion';
 export default function Services() {
   const { services, addService, updateService, deleteService } = useStreaming();
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newService, setNewService] = useState({ name: '', color: '#7B68EE', maxProfiles: 7 });
 
-  const handleAddService = async () => {
+  const handleAddService = () => {
     if (!newService.name) return;
-    const success = await addService({ name: newService.name, color: newService.color, maxProfiles: newService.maxProfiles, isCustom: true });
-    if (success) {
+    if (addService({ name: newService.name, color: newService.color, maxProfiles: newService.maxProfiles, isCustom: true })) {
       setIsAddOpen(false);
       setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
     }
   };
 
-  const handleUpdateService = async (id: number) => {
+  const handleUpdateService = (id: string) => {
     if (!newService.name) return;
-    const success = await updateService(id, { color: newService.color, maxProfiles: newService.maxProfiles });
-    if (success) {
+    if (updateService(id, { color: newService.color, maxProfiles: newService.maxProfiles })) {
       setEditingId(null);
       setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
     }
@@ -49,13 +47,13 @@ export default function Services() {
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-white mb-2" data-testid="text-page-title">Servicios</h1>
+          <h1 className="text-3xl font-display font-bold text-white mb-2">Servicios</h1>
           <p className="text-muted-foreground">Gestiona los servicios de streaming disponibles.</p>
         </div>
         
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]" data-testid="button-add-service">
+            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
               <Plus className="mr-2 h-4 w-4" /> Nuevo Servicio
             </Button>
           </DialogTrigger>
@@ -71,7 +69,6 @@ export default function Services() {
                   placeholder="Nombre del servicio"
                   value={newService.name} 
                   onChange={e => setNewService({...newService, name: e.target.value})}
-                  data-testid="input-service-name"
                 />
               </div>
               <div className="space-y-2">
@@ -82,7 +79,6 @@ export default function Services() {
                     value={newService.color}
                     onChange={e => setNewService({...newService, color: e.target.value})}
                     className="w-12 h-10 rounded cursor-pointer"
-                    data-testid="input-service-color"
                   />
                   <Input 
                     className="glass-input" 
@@ -98,23 +94,23 @@ export default function Services() {
                   type="number" 
                   className="glass-input" 
                   value={newService.maxProfiles} 
-                  onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value) || 7})}
-                  data-testid="input-max-profiles"
+                  onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value)})}
                 />
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleAddService} className="bg-primary text-white" data-testid="button-create-service">Crear Servicio</Button>
+              <Button onClick={handleAddService} className="bg-primary text-white">Crear Servicio</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
+      {/* Grid de Servicios */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {services.map(service => (
           <motion.div key={service.id} variants={item} initial="hidden" animate="show">
-            <Card className="glass-card relative overflow-hidden group" data-testid={`card-service-${service.id}`}>
+            <Card className="glass-card relative overflow-hidden group">
               <div 
                 className="absolute top-0 left-0 right-0 h-1"
                 style={{ backgroundColor: service.color }}
@@ -162,7 +158,6 @@ export default function Services() {
                             variant="ghost"
                             onClick={() => startEdit(service)}
                             className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 h-8"
-                            data-testid={`button-edit-service-${service.id}`}
                           >
                             <Edit className="h-3 w-3 mr-1" /> Editar
                           </Button>
@@ -194,7 +189,7 @@ export default function Services() {
                                 type="number" 
                                 className="glass-input" 
                                 value={newService.maxProfiles} 
-                                onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value) || 7})}
+                                onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value)})}
                               />
                             </div>
                           </div>
@@ -213,7 +208,6 @@ export default function Services() {
                           }
                         }}
                         className="flex-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8"
-                        data-testid={`button-delete-service-${service.id}`}
                       >
                         <Trash2 className="h-3 w-3 mr-1" /> Eliminar
                       </Button>

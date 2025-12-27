@@ -12,7 +12,7 @@ export default function AccountDetail() {
   const [, navigate] = useLocation();
   const { accounts, renewAccount, renewProfile } = useStreaming();
 
-  const accountId = params?.id ? parseInt(params.id) : null;
+  const accountId = params?.id;
   const account = accounts.find(acc => acc.id === accountId);
 
   if (!account) {
@@ -207,7 +207,7 @@ export default function AccountDetail() {
 
                   {canRenew && (
                     <Button 
-                      onClick={() => renewProfile(account.id, profile.id, parseFloat(profile.price || account.pricePerProfile || '0'))}
+                      onClick={() => renewProfile(account.id, profile.id, profile.price || account.pricePerProfile)}
                       className="w-full bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary text-sm"
                     >
                       <RotateCw className="mr-2 h-3 w-3" /> Renovar Perfil
