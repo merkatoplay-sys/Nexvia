@@ -12,35 +12,35 @@ import { motion } from 'framer-motion';
 
 export default function Profiles() {
   const { accounts, clients, updateProfile, renewProfile, deleteProfile, getServiceColor } = useStreaming();
-  const [expandedAccount, setExpandedAccount] = useState<number | null>(null);
+  const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
   const [editingPrice, setEditingPrice] = useState(false);
 
-  const handleEdit = (profile: any, accountId: number) => {
-    setEditingId(profile.id + '-' + accountId);
+  const handleEdit = (profile: any, accountId: string) => {
+    setEditingId(profile.id + accountId);
     setEditData({ 
       name: profile.name, 
       pin: profile.pin || '', 
-      clientId: profile.clientId?.toString() || '', 
+      clientId: profile.clientId || '', 
       phone: profile.phone || '',
-      price: parseFloat(profile.price) || 0
+      price: profile.price || 0
     });
   };
 
-  const handleSave = async (accountId: number, profileId: number) => {
-    await updateProfile(accountId, profileId, {
+  const handleSave = (accountId: string, profileId: string) => {
+    updateProfile(accountId, profileId, {
       name: editData.name,
       pin: editData.pin || undefined,
-      clientId: editData.clientId ? parseInt(editData.clientId) : undefined,
+      clientId: editData.clientId || undefined,
       phone: editData.phone || undefined,
-      price: editData.price ? editData.price.toString() : undefined
+      price: editData.price || undefined
     });
     setEditingId(null);
     setEditingPrice(false);
   };
 
-  const getClientName = (clientId?: number) => {
+  const getClientName = (clientId?: string) => {
     if (!clientId) return 'Sin asignar';
     return clients.find(c => c.id === clientId)?.name || 'Desconocido';
   };
@@ -111,7 +111,7 @@ export default function Profiles() {
                         accountProfiles.map((profile) => {
                           const daysLeft = profile.endDate ? differenceInDays(new Date(profile.endDate), new Date()) : 0;
                           const canRenew = daysLeft <= 1;
-                          const isEditing = editingId === profile.id + '-' + account.id;
+                          const isEditing = editingId === profile.id + account.id;
 
                           return (
                             <motion.div
@@ -184,7 +184,7 @@ export default function Profiles() {
                                         <SelectContent className="bg-popover border-white/10 text-white">
                                           <SelectItem value="">Sin asignar</SelectItem>
                                           {clients.map(c => (
-                                            <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
+                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
@@ -254,16 +254,16 @@ export default function Profiles() {
                                     </Button>
                                     {canRenew && (
                                       <Button
-                                        onClick={async () => await renewProfile(account.id, profile.id, parseFloat(profile.price || '0') || 5)}
+                                        onClick={() => renewProfile(account.id, profile.id, profile.price || 5)}
                                         className="bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400 h-8 text-sm"
                                       >
                                         <RotateCw className="h-3 w-3 mr-1" /> Renovar
                                       </Button>
                                     )}
                                     <Button
-                                      onClick={async () => {
+                                      onClick={() => {
                                         if (confirm(`¿Eliminar perfil ${profile.name}?`)) {
-                                          await deleteProfile(account.id, profile.id);
+                                          deleteProfile(account.id, profile.id);
                                         }
                                       }}
                                       className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-sm"

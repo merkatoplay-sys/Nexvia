@@ -17,24 +17,24 @@ export default function Renovaciones() {
   const { accounts, renewAccountMaster, renewProfileSale, processRefund, recordAdjustment } = useStreaming();
   const [renovationType, setRenovationType] = useState<RenovationType>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedAccount, setSelectedAccount] = useState<number | null>(null);
-  const [selectedProfile, setSelectedProfile] = useState<number | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [selectedProfile, setSelectedProfile] = useState<string>('');
   const [renewalDays, setRenewalDays] = useState<number>(30);
   const [cost, setCost] = useState<number>(0);
   const [refundData, setRefundData] = useState({ amount: 0, reason: '' });
 
   const handleStartRenewal = (type: RenovationType) => {
     setRenovationType(type);
-    setSelectedAccount(null);
-    setSelectedProfile(null);
+    setSelectedAccount('');
+    setSelectedProfile('');
     setRenewalDays(30);
     setCost(0);
     setRefundData({ amount: 0, reason: '' });
     setIsDialogOpen(true);
   };
 
-  const handleConfirmRenewal = async () => {
-    if (selectedAccount === null) {
+  const handleConfirmRenewal = () => {
+    if (!selectedAccount) {
       toast.error('Selecciona una cuenta');
       return;
     }
@@ -44,9 +44,9 @@ export default function Renovaciones() {
         toast.error('Ingresa el costo de renovación');
         return;
       }
-      await renewAccountMaster(selectedAccount, renewalDays, cost);
+      renewAccountMaster(selectedAccount, renewalDays, cost);
     } else if (renovationType === 'profile') {
-      if (selectedProfile === null) {
+      if (!selectedProfile) {
         toast.error('Selecciona un perfil');
         return;
       }
@@ -54,19 +54,19 @@ export default function Renovaciones() {
         toast.error('Ingresa el costo de renovación');
         return;
       }
-      await renewProfileSale(selectedAccount, selectedProfile, renewalDays, cost);
+      renewProfileSale(selectedAccount, selectedProfile, renewalDays, cost);
     }
 
     setIsDialogOpen(false);
     setRenovationType(null);
   };
 
-  const handleProcessRefund = async () => {
-    if (selectedProfile === null || refundData.amount <= 0 || !refundData.reason) {
+  const handleProcessRefund = () => {
+    if (!selectedProfile || refundData.amount <= 0 || !refundData.reason) {
       toast.error('Completa todos los campos');
       return;
     }
-    await processRefund(selectedProfile, refundData.amount, refundData.reason);
+    processRefund(selectedProfile, refundData.amount, refundData.reason);
     setIsDialogOpen(false);
     setRenovationType(null);
   };
@@ -133,13 +133,13 @@ export default function Renovaciones() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Selecciona la cuenta</label>
-                  <Select value={selectedAccount?.toString() ?? ''} onValueChange={(val) => setSelectedAccount(parseInt(val))}>
+                  <Select value={selectedAccount} onValueChange={setSelectedAccount}>
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Elige una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {accounts.map(acc => (
-                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                        <SelectItem key={acc.id} value={acc.id}>
                           {acc.serviceName} - {acc.email}
                         </SelectItem>
                       ))}
@@ -222,16 +222,16 @@ export default function Renovaciones() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Selecciona la cuenta maestra</label>
-                  <Select value={selectedAccount?.toString() ?? ''} onValueChange={(val) => {
-                    setSelectedAccount(parseInt(val));
-                    setSelectedProfile(null);
+                  <Select value={selectedAccount} onValueChange={(val) => {
+                    setSelectedAccount(val);
+                    setSelectedProfile('');
                   }}>
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Elige una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {accounts.map(acc => (
-                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                        <SelectItem key={acc.id} value={acc.id}>
                           {acc.serviceName}
                         </SelectItem>
                       ))}
@@ -242,7 +242,7 @@ export default function Renovaciones() {
                 {selectedAccountData && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Selecciona el perfil</label>
-                    <Select value={selectedProfile?.toString() ?? ''} onValueChange={(val) => setSelectedProfile(parseInt(val))}>
+                    <Select value={selectedProfile} onValueChange={setSelectedProfile}>
                       <SelectTrigger className="glass-input">
                         <SelectValue placeholder="Elige un perfil" />
                       </SelectTrigger>
@@ -250,7 +250,7 @@ export default function Renovaciones() {
                         {selectedAccountData.profiles
                           .filter(p => p.status !== 'disponible' && p.endDate)
                           .map(profile => (
-                            <SelectItem key={profile.id} value={profile.id.toString()}>
+                            <SelectItem key={profile.id} value={profile.id}>
                               {profile.name} - {profile.clientId || 'Sin cliente'}
                             </SelectItem>
                           ))}
@@ -339,16 +339,16 @@ export default function Renovaciones() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Selecciona el perfil</label>
-                  <Select value={selectedAccount?.toString() ?? ''} onValueChange={(val) => {
-                    setSelectedAccount(parseInt(val));
-                    setSelectedProfile(null);
+                  <Select value={selectedAccount} onValueChange={(val) => {
+                    setSelectedAccount(val);
+                    setSelectedProfile('');
                   }}>
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Elige una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {accounts.map(acc => (
-                        <SelectItem key={acc.id} value={acc.id.toString()}>
+                        <SelectItem key={acc.id} value={acc.id}>
                           {acc.serviceName}
                         </SelectItem>
                       ))}
@@ -359,7 +359,7 @@ export default function Renovaciones() {
                 {selectedAccountData && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Perfil a devolver</label>
-                    <Select value={selectedProfile?.toString() ?? ''} onValueChange={(val) => setSelectedProfile(parseInt(val))}>
+                    <Select value={selectedProfile} onValueChange={setSelectedProfile}>
                       <SelectTrigger className="glass-input">
                         <SelectValue placeholder="Elige un perfil" />
                       </SelectTrigger>
@@ -367,7 +367,7 @@ export default function Renovaciones() {
                         {selectedAccountData.profiles
                           .filter(p => p.status !== 'disponible')
                           .map(profile => (
-                            <SelectItem key={profile.id} value={profile.id.toString()}>
+                            <SelectItem key={profile.id} value={profile.id}>
                               {profile.name} - ${profile.price || 0}
                             </SelectItem>
                           ))}
