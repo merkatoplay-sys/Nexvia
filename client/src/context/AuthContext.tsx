@@ -1,20 +1,10 @@
 import React, { ReactNode } from 'react';
-import { useAuth as useReplitAuth } from '@/hooks/use-auth';
-import { useLocation } from 'wouter';
-import { useEffect } from 'react';
+import { useAuth } from '@/hooks/use-auth';
 
 export { useAuth } from '@/hooks/use-auth';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated, isLoading, user } = useReplitAuth();
-  const [location] = useLocation();
-
-  useEffect(() => {
-    // Redirect to login if not authenticated (except on login/api routes)
-    if (!isLoading && !isAuthenticated && location !== '/login' && !location.startsWith('/api')) {
-      window.location.href = '/api/login';
-    }
-  }, [isAuthenticated, isLoading, location]);
+  const { isLoading } = useAuth();
 
   if (isLoading) {
     return (

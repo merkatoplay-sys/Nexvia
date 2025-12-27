@@ -1,16 +1,39 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { MonitorPlay } from 'lucide-react';
+import { MonitorPlay, Lock, Mail, User } from 'lucide-react';
+import { toast } from 'sonner';
+import { useLocation } from 'wouter';
 
 export default function Login() {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      window.location.href = '/api/login';
-    }, 1000);
+  const { login, register, isLoggingIn, isRegistering } = useAuth();
+  const [, setLocation] = useLocation();
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
 
-    return () => clearTimeout(timer);
-  }, []);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      if (isRegisterMode) {
+        await register({ email, password, firstName, lastName });
+        toast.success('Cuenta creada exitosamente');
+      } else {
+        await login({ email, password });
+        toast.success('Bienvenido a NEXVIA');
+      }
+      setLocation('/');
+    } catch (error: any) {
+      toast.error(error.message || 'Error de autenticación');
+    }
+  };
+
+  const isLoading = isLoggingIn || isRegistering;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
@@ -29,28 +52,104 @@ export default function Login() {
               NEX<span className="text-primary">VIA</span>
             </CardTitle>
             <CardDescription className="text-muted-foreground text-base">
-              Gestión profesional de servicios de streaming
+              {isRegisterMode ? 'Crear nueva cuenta' : 'Gestión profesional de servicios de streaming'}
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="text-center space-y-4">
-            <p className="text-white/80 text-sm">
-              Redirigiendo al sistema de autenticación...
-            </p>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {isRegisterMode && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white ml-1">Nombre</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Juan"
+                      className="pl-10 glass-input h-11"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      data-testid="input-firstname"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white ml-1">Apellido</label>
+                  <Input
+                    type="text"
+                    placeholder="Pérez"
+                    className="glass-input h-11"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    data-testid="input-lastname"
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white ml-1">Correo Electrónico</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="email"
+                  placeholder="correo@ejemplo.com"
+                  className="pl-10 glass-input h-11"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  data-testid="input-email"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-white ml-1">Contraseña</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  className="pl-10 glass-input h-11"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  data-testid="input-password"
+                />
+              </div>
+              {isRegisterMode && (
+                <p className="text-xs text-muted-foreground ml-1">Mínimo 6 caracteres</p>
+              )}
+            </div>
+
             <Button 
-              onClick={() => window.location.href = '/api/login'}
+              type="submit" 
               className="w-full bg-primary hover:bg-primary/90 text-white h-11 font-medium text-base shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
-              data-testid="button-login"
+              disabled={isLoading}
+              data-testid="button-submit"
             >
-              Iniciar Sesión con Replit
+              {isLoading 
+                ? (isRegisterMode ? 'Creando cuenta...' : 'Iniciando sesión...') 
+                : (isRegisterMode ? 'Crear Cuenta' : 'Ingresar al Panel')
+              }
             </Button>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground">
-              Acceso seguro con Google, GitHub, X o Email
-            </p>
-          </div>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setIsRegisterMode(!isRegisterMode)}
+                className="text-sm text-primary hover:underline"
+                data-testid="button-toggle-mode"
+              >
+                {isRegisterMode 
+                  ? '¿Ya tienes cuenta? Inicia sesión' 
+                  : '¿No tienes cuenta? Regístrate'
+                }
+              </button>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>
