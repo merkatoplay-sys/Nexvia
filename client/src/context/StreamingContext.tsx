@@ -1,67 +1,74 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { useAuth } from './AuthContext';
-import { addDays, subDays, isBefore, isAfter, parseISO, differenceInDays } from 'date-fns';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/use-auth';
+import { addDays, differenceInDays, isBefore, isAfter } from 'date-fns';
 import { toast } from 'sonner';
+import { isUnauthorizedError } from '@/lib/auth-utils';
 
 export type ServiceType = string;
 
 export interface Service {
   id: string;
-  userId?: string;
+  userId: string;
   name: string;
   color: string;
   maxProfiles: number;
   isCustom: boolean;
+  createdAt?: Date;
 }
 
 export interface Profile {
   id: string;
-  userId?: string;
+  userId: string;
+  accountId: string;
   name: string;
-  phone?: string;
-  pin?: string;
-  clientId?: string;
-  price?: number;
-  startDate?: string;
-  endDate?: string;
+  phone?: string | null;
+  pin?: string | null;
+  clientId?: string | null;
+  price?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
   status: 'activo' | 'vencido' | 'disponible';
+  createdAt?: Date;
 }
 
 export interface Account {
   id: string;
-  userId?: string;
+  userId: string;
   serviceName: ServiceType;
   email: string;
-  password?: string;
+  password?: string | null;
   totalProfiles: number;
-  profiles: Profile[];
   startDate: string;
   expirationDate: string;
   isRenewable: boolean;
   cost: number;
   pricePerProfile: number;
   status: 'activa' | 'por vencer' | 'vencida';
+  createdAt?: Date;
 }
 
 export interface Client {
   id: string;
-  userId?: string;
+  userId: string;
   name: string;
   phone: string;
-  notes?: string;
+  notes?: string | null;
+  createdAt?: Date;
 }
 
 export interface Expense {
   id: string;
-  userId?: string;
+  userId: string;
   description: string;
   amount: number;
   type: 'ganancia' | 'gasto' | 'ajuste';
-  profileId?: string;
-  accountId?: string;
+  profileId?: string | null;
+  accountId?: string | null;
   date: string;
-  note?: string;
-  reference?: string;
+  note?: string | null;
+  reference?: string | null;
+  createdAt?: Date;
 }
 
 export interface NotificationSettings {
@@ -75,8 +82,16 @@ export interface NotificationSettings {
 }
 
 export interface AppSettings {
+  id: string;
+  userId: string;
   defaultCurrency: string;
-  notifications: NotificationSettings;
+  notificationsEnabled: boolean;
+  notificationChannel: 'whatsapp' | 'telegram';
+  daysBeforeExpiry: number;
+  notificationTime: string;
+  telegramBotToken?: string | null;
+  telegramChatId?: string | null;
+  whatsappPhoneNumber?: string | null;
 }
 
 interface StreamingContextType {
@@ -84,136 +99,202 @@ interface StreamingContextType {
   clients: Client[];
   expenses: Expense[];
   services: Service[];
-  settings: AppSettings;
-  addAccount: (account: Omit<Account, 'id' | 'status'>) => boolean;
-  updateAccount: (id: string, updates: Partial<Account>) => boolean;
-  deleteAccount: (id: string) => void;
-  sellProfile: (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => boolean;
-  renewProfile: (accountId: string, profileId: string, renewalPrice: number) => boolean;
-  renewAccount: (accountId: string) => boolean;
-  updateProfile: (accountId: string, profileId: string, updates: Partial<Profile>) => boolean;
-  addClient: (client: Omit<Client, 'id'>) => string;
-  addExpense: (expense: Omit<Expense, 'id'>) => void;
-  addService: (service: Omit<Service, 'id'>) => boolean;
-  updateService: (id: string, updates: Partial<Service>) => boolean;
-  updateSettings: (settings: Partial<AppSettings>) => void;
-  getAllProfiles: () => Array<Profile & { accountId: string; accountName: string }>;
+  profiles: Profile[];
+  settings: AppSettings | null;
+  isLoading: boolean;
+  addAccount: (account: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => Promise<boolean>;
+  updateAccount: (id: string, updates: Partial<Account>) => Promise<boolean>;
+  deleteAccount: (id: string) => Promise<void>;
+  sellProfile: (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => Promise<boolean>;
+  renewProfile: (accountId: string, profileId: string, renewalPrice: number) => Promise<boolean>;
+  renewAccount: (accountId: string) => Promise<boolean>;
+  updateProfile: (accountId: string, profileId: string, updates: Partial<Profile>) => Promise<boolean>;
+  addClient: (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => Promise<string>;
+  addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
+  addService: (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => Promise<boolean>;
+  updateService: (id: string, updates: Partial<Service>) => Promise<boolean>;
+  updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
+  getAllProfiles: () => Array<Profile & { accountName: string }>;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
   getServiceColor: (serviceName: string) => string;
   getMaxProfilesByService: (serviceName: ServiceType) => number;
-  deleteService: (id: string) => void;
-  deleteProfile: (accountId: string, profileId: string) => void;
+  deleteService: (id: string) => Promise<void>;
+  deleteProfile: (accountId: string, profileId: string) => Promise<void>;
   sendTelegramTestNotification: (botToken: string, chatId: string) => Promise<boolean>;
-  renewAccountMaster: (accountId: string, renewalDays: number, cost: number) => boolean;
-  renewProfileSale: (accountId: string, profileId: string, renewalDays: number, cost: number) => boolean;
-  processRefund: (profileId: string, amount: number, reason: string) => boolean;
-  recordAdjustment: (description: string, amount: number, reference: string) => void;
+  renewAccountMaster: (accountId: string, renewalDays: number, cost: number) => Promise<boolean>;
+  renewProfileSale: (accountId: string, profileId: string, renewalDays: number, cost: number) => Promise<boolean>;
+  processRefund: (profileId: string, amount: number, reason: string) => Promise<boolean>;
+  recordAdjustment: (description: string, amount: number, reference: string) => Promise<void>;
 }
 
 const StreamingContext = createContext<StreamingContextType | undefined>(undefined);
 
-const DEFAULT_SERVICES: Service[] = [
-  { id: 's1', name: 'Netflix', color: '#E50914', maxProfiles: 5, isCustom: false },
-  { id: 's2', name: 'Spotify', color: '#1DB954', maxProfiles: 7, isCustom: false },
-  { id: 's3', name: 'Disney+', color: '#0072F5', maxProfiles: 7, isCustom: false },
-  { id: 's4', name: 'Prime Video', color: '#146EB4', maxProfiles: 7, isCustom: false },
-  { id: 's5', name: 'HBO', color: '#000000', maxProfiles: 7, isCustom: false },
-  { id: 's6', name: 'Crunchyroll', color: '#F47521', maxProfiles: 7, isCustom: false },
-  { id: 's7', name: 'Vix', color: '#7B68EE', maxProfiles: 7, isCustom: false },
-];
-
-const MOCK_CLIENTS: Client[] = [
-  { id: 'c1', name: 'Juan Pérez', phone: '+52 555 123 4567' },
-  { id: 'c2', name: 'Maria Lopez', phone: '+52 555 987 6543' },
-  { id: 'c3', name: 'Carlos Ruiz', phone: '+52 555 111 2222' },
-];
-
-const MOCK_ACCOUNTS: Account[] = [
-  {
-    id: 'a1',
-    serviceName: 'Netflix',
-    email: 'netflix.master@example.com',
-    totalProfiles: 5,
-    profiles: [
-      { id: 'p1', name: 'Familia', phone: '+52 555 123 4567', clientId: 'c1', price: 5, status: 'activo', startDate: new Date().toISOString(), endDate: addDays(new Date(), 1).toISOString() },
-      { id: 'p2', name: 'Trabajo', phone: '+52 555 987 6543', clientId: 'c2', price: 5, status: 'activo', startDate: new Date().toISOString(), endDate: addDays(new Date(), 30).toISOString() },
-      { id: 'p3', name: 'Disponible', status: 'disponible' },
-      { id: 'p4', name: 'Disponible', status: 'disponible' },
-      { id: 'p5', name: 'Disponible', status: 'disponible' },
-    ],
-    startDate: new Date().toISOString(),
-    expirationDate: addDays(new Date(), 25).toISOString(),
-    isRenewable: true,
-    cost: 15,
-    pricePerProfile: 5,
-    status: 'activa',
-  },
-  {
-    id: 'a2',
-    serviceName: 'Spotify',
-    email: 'spotify.music@example.com',
-    totalProfiles: 6,
-    profiles: [
-      { id: 'sp1', name: 'Principal', phone: '+52 555 111 2222', clientId: 'c3', price: 3, status: 'activo', startDate: subDays(new Date(), 10).toISOString(), endDate: addDays(new Date(), 20).toISOString() },
-      { id: 'sp2', name: 'Disponible', status: 'disponible' },
-      { id: 'sp3', name: 'Disponible', status: 'disponible' },
-      { id: 'sp4', name: 'Disponible', status: 'disponible' },
-      { id: 'sp5', name: 'Disponible', status: 'disponible' },
-      { id: 'sp6', name: 'Disponible', status: 'disponible' },
-    ],
-    startDate: subDays(new Date(), 28).toISOString(),
-    expirationDate: addDays(new Date(), 2).toISOString(),
-    isRenewable: true,
-    cost: 10,
-    pricePerProfile: 3,
-    status: 'por vencer',
-  },
-];
-
-const MOCK_EXPENSES: Expense[] = [
-  {
-    id: 'e1',
-    description: 'Venta de perfil Familia',
-    amount: 5,
-    type: 'ganancia',
-    profileId: 'p1',
-    accountId: 'a1',
-    date: subDays(new Date(), 5).toISOString()
-  },
-  {
-    id: 'e2',
-    description: 'Renovación Netflix',
-    amount: 15,
-    type: 'gasto',
-    accountId: 'a1',
-    date: subDays(new Date(), 3).toISOString()
+async function fetchAPI(url: string, options?: RequestInit) {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+  
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Unauthorized');
+    }
+    const errorData = await res.json().catch(() => ({ message: 'Error del servidor' }));
+    throw new Error(errorData.message || 'Error del servidor');
   }
-];
-
-const DEFAULT_SETTINGS: AppSettings = {
-  defaultCurrency: 'USD',
-  notifications: {
-    enabled: true,
-    channel: 'telegram',
-    daysBeforeExpiry: 3,
-    notificationTime: '09:00',
-    telegramBotToken: '',
-    telegramChatId: '',
-    whatsappPhoneNumber: ''
-  }
-};
+  
+  return res.json();
+}
 
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
-  const currentUserId = user?.id || 'admin-tenant-id-001';
+  const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
-  const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
-  const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
-  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES.filter(s => s.name && s.name.trim()));
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery({
+    queryKey: ['/api/accounts'],
+    queryFn: () => fetchAPI('/api/accounts'),
+    enabled: isAuthenticated,
+  });
 
-  const addAccount = (newAccount: Omit<Account, 'id' | 'status'>) => {
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
+    queryKey: ['/api/clients'],
+    queryFn: () => fetchAPI('/api/clients'),
+    enabled: isAuthenticated,
+  });
+
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery({
+    queryKey: ['/api/expenses'],
+    queryFn: () => fetchAPI('/api/expenses'),
+    enabled: isAuthenticated,
+  });
+
+  const { data: services = [], isLoading: servicesLoading } = useQuery({
+    queryKey: ['/api/services'],
+    queryFn: () => fetchAPI('/api/services'),
+    enabled: isAuthenticated,
+  });
+
+  const { data: profiles = [], isLoading: profilesLoading } = useQuery({
+    queryKey: ['/api/profiles'],
+    queryFn: () => fetchAPI('/api/profiles'),
+    enabled: isAuthenticated,
+  });
+
+  const { data: settings = null, isLoading: settingsLoading } = useQuery({
+    queryKey: ['/api/settings'],
+    queryFn: () => fetchAPI('/api/settings'),
+    enabled: isAuthenticated,
+  });
+
+  const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
+
+  const createAccountMutation = useMutation({
+    mutationFn: (account: any) => fetchAPI('/api/accounts', { method: 'POST', body: JSON.stringify(account) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast.error('Sesión expirada. Redirigiendo...');
+        setTimeout(() => { window.location.href = '/api/login'; }, 500);
+      }
+    },
+  });
+
+  const updateAccountMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Account> }) =>
+      fetchAPI(`/api/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast.error('Sesión expirada. Redirigiendo...');
+        setTimeout(() => { window.location.href = '/api/login'; }, 500);
+      }
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: (id: string) => fetchAPI(`/api/accounts/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+    },
+  });
+
+  const createServiceMutation = useMutation({
+    mutationFn: (service: any) => fetchAPI('/api/services', { method: 'POST', body: JSON.stringify(service) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+    },
+  });
+
+  const updateServiceMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Service> }) =>
+      fetchAPI(`/api/services/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+    },
+  });
+
+  const deleteServiceMutation = useMutation({
+    mutationFn: (id: string) => fetchAPI(`/api/services/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+    },
+  });
+
+  const createProfileMutation = useMutation({
+    mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+    },
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Profile> }) =>
+      fetchAPI(`/api/profiles/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+    },
+  });
+
+  const deleteProfileMutation = useMutation({
+    mutationFn: (id: string) => fetchAPI(`/api/profiles/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+    },
+  });
+
+  const createClientMutation = useMutation({
+    mutationFn: (client: any) => fetchAPI('/api/clients', { method: 'POST', body: JSON.stringify(client) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+    },
+  });
+
+  const createExpenseMutation = useMutation({
+    mutationFn: (expense: any) => fetchAPI('/api/expenses', { method: 'POST', body: JSON.stringify(expense) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+    },
+  });
+
+  const updateSettingsMutation = useMutation({
+    mutationFn: (updates: any) => fetchAPI('/api/settings', { method: 'PATCH', body: JSON.stringify(updates) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+    },
+  });
+
+  const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
     const service = services.find(s => s.name === newAccount.serviceName);
     const maxProfiles = service?.maxProfiles || 7;
     
@@ -222,60 +303,69 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
 
-    const id = Math.random().toString(36).substr(2, 9);
-    
-    // Add userId to profiles too
-    const profilesWithUser = newAccount.profiles.map(p => ({
-      ...p,
-      userId: currentUserId
-    }));
+    const accountToCreate = {
+      ...newAccount,
+      status: 'activa' as const,
+    };
 
-    toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
-    setAccounts([...accounts, { 
-      ...newAccount, 
-      id, 
-      status: 'activa',
-      userId: currentUserId,
-      profiles: profilesWithUser
-    }]);
-    return true;
-  };
+    try {
+      const createdAccount = await createAccountMutation.mutateAsync(accountToCreate);
+      
+      const profilesData = Array.from({ length: newAccount.totalProfiles }, (_, i) => ({
+        accountId: createdAccount.id,
+        name: 'Disponible',
+        status: 'disponible' as const,
+      }));
 
-  const updateAccount = (id: string, updates: Partial<Account>) => {
-    const account = accounts.find(acc => acc.id === id);
-    if (!account) return false;
-    setAccounts(accounts.map(acc => (acc.id === id ? { ...acc, ...updates } : acc)));
-    toast.success('Cuenta actualizada exitosamente');
-    return true;
-  };
+      await Promise.all(profilesData.map(profile => createProfileMutation.mutateAsync(profile)));
 
-  const deleteAccount = (id: string) => {
-    const accountToDelete = accounts.find(a => a.id === id);
-    if (!accountToDelete) {
-      toast.error('Cuenta no encontrada');
-      return;
+      toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
+      return true;
+    } catch (error) {
+      toast.error('Error al crear la cuenta');
+      return false;
     }
-    
-    setAccounts(accounts.filter(acc => acc.id !== id));
-    
-    const profileIds = accountToDelete.profiles.map(p => p.id);
-    setExpenses(expenses.filter(e => !profileIds.includes(e.profileId || '')));
-    
-    toast.success('Cuenta maestra y sus perfiles eliminados');
   };
 
-  const addClient = (client: Omit<Client, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setClients([...clients, { ...client, id, userId: currentUserId }]);
-    return id;
+  const updateAccount = async (id: string, updates: Partial<Account>) => {
+    try {
+      await updateAccountMutation.mutateAsync({ id, updates });
+      toast.success('Cuenta actualizada exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al actualizar la cuenta');
+      return false;
+    }
   };
 
-  const addExpense = (expense: Omit<Expense, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setExpenses([...expenses, { ...expense, id, userId: currentUserId }]);
+  const deleteAccount = async (id: string) => {
+    try {
+      await deleteAccountMutation.mutateAsync(id);
+      toast.success('Cuenta maestra y sus perfiles eliminados');
+    } catch (error) {
+      toast.error('Error al eliminar la cuenta');
+    }
   };
 
-  const addService = (service: Omit<Service, 'id'>) => {
+  const addClient = async (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => {
+    try {
+      const created = await createClientMutation.mutateAsync(client);
+      return created.id;
+    } catch (error) {
+      toast.error('Error al agregar cliente');
+      return '';
+    }
+  };
+
+  const addExpense = async (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => {
+    try {
+      await createExpenseMutation.mutateAsync(expense);
+    } catch (error) {
+      toast.error('Error al registrar transacción');
+    }
+  };
+
+  const addService = async (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => {
     if (!service.name || !service.name.trim()) {
       toast.error('El nombre del servicio no puede estar vacío');
       return false;
@@ -284,389 +374,399 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       toast.error('Este servicio ya existe');
       return false;
     }
-    const id = Math.random().toString(36).substr(2, 9);
-    setServices([...services, { ...service, id, userId: currentUserId }]);
-    toast.success(`Servicio "${service.name}" creado exitosamente`);
-    return true;
-  };
-
-  const updateService = (id: string, updates: Partial<Service>) => {
-    setServices(services.map(s => (s.id === id ? { ...s, ...updates } : s)));
-    toast.success('Servicio actualizado exitosamente');
-    return true;
-  };
-
-  const sellProfile = (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => {
-    const account = accounts.find(acc => acc.id === accountId);
-    if (!account) {
-      toast.error('Cuenta no encontrada');
+    try {
+      await createServiceMutation.mutateAsync(service);
+      toast.success(`Servicio "${service.name}" creado exitosamente`);
+      return true;
+    } catch (error) {
+      toast.error('Error al crear el servicio');
       return false;
     }
-
-    const profile = account.profiles.find(p => p.id === profileId);
-    if (!profile || profile.status !== 'disponible') {
-      toast.error('Este perfil no está disponible');
-      return false;
-    }
-
-    let clientId = '';
-    const existingClient = clients.find(c => c.phone === clientData.phone);
-    if (existingClient) {
-      clientId = existingClient.id;
-    } else {
-      clientId = addClient({ name: clientData.name, phone: clientData.phone });
-    }
-
-    const updatedAccounts = accounts.map(acc => {
-      if (acc.id !== accountId) return acc;
-      return {
-        ...acc,
-        profiles: acc.profiles.map(p => {
-          if (p.id !== profileId) return p;
-          return {
-            ...p,
-            name: clientData.name,
-            phone: clientData.phone,
-            pin: clientData.pin,
-            price: clientData.price,
-            status: 'activo' as const,
-            clientId,
-            startDate: clientData.startDate,
-            endDate: clientData.endDate
-          };
-        })
-      };
-    });
-
-    setAccounts(updatedAccounts);
-    addExpense({
-      description: `Venta de perfil ${clientData.name}`,
-      amount: clientData.price,
-      type: 'ganancia',
-      profileId,
-      accountId,
-      date: new Date().toISOString()
-    });
-    toast.success(`Perfil vendido a ${clientData.name}`);
-    return true;
   };
 
-  const renewProfile = (accountId: string, profileId: string, renewalPrice: number) => {
-    const account = accounts.find(acc => acc.id === accountId);
-    if (!account) {
-      toast.error('Cuenta no encontrada');
+  const updateService = async (id: string, updates: Partial<Service>) => {
+    try {
+      await updateServiceMutation.mutateAsync({ id, updates });
+      toast.success('Servicio actualizado exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al actualizar el servicio');
       return false;
     }
+  };
 
-    const profile = account.profiles.find(p => p.id === profileId);
+  const sellProfile = async (accountId: string, profileId: string, clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }) => {
+    try {
+      let clientId = '';
+      const existingClient = clients.find(c => c.phone === clientData.phone);
+      if (existingClient) {
+        clientId = existingClient.id;
+      } else {
+        clientId = await addClient({ name: clientData.name, phone: clientData.phone });
+      }
+
+      await updateProfileMutation.mutateAsync({
+        id: profileId,
+        updates: {
+          name: clientData.name,
+          phone: clientData.phone,
+          pin: clientData.pin,
+          price: clientData.price,
+          status: 'activo',
+          clientId,
+          startDate: clientData.startDate,
+          endDate: clientData.endDate,
+        },
+      });
+
+      await addExpense({
+        description: `Venta de perfil ${clientData.name}`,
+        amount: clientData.price,
+        type: 'ganancia',
+        profileId,
+        accountId,
+        date: new Date().toISOString(),
+      });
+
+      toast.success(`Perfil vendido a ${clientData.name}`);
+      return true;
+    } catch (error) {
+      toast.error('Error al vender el perfil');
+      return false;
+    }
+  };
+
+  const renewProfile = async (accountId: string, profileId: string, renewalPrice: number) => {
+    const profile = profiles.find(p => p.id === profileId);
     if (!profile || profile.status !== 'activo') {
       toast.error('Este perfil no puede renovarse');
       return false;
     }
 
-    const updatedAccounts = accounts.map(acc => {
-      if (acc.id !== accountId) return acc;
-      return {
-        ...acc,
-        profiles: acc.profiles.map(p => {
-          if (p.id !== profileId) return p;
-          return {
-            ...p,
-            endDate: addDays(new Date(p.endDate || new Date()), 30).toISOString(),
-            price: renewalPrice
-          };
-        })
-      };
-    });
-
-    setAccounts(updatedAccounts);
-    addExpense({
-      description: `Renovación ${profile.name} - ${account.serviceName}`,
-      amount: renewalPrice,
-      type: 'ganancia',
-      profileId,
-      accountId,
-      date: new Date().toISOString()
-    });
-    toast.success(`Perfil renovado exitosamente`);
-    return true;
-  };
-
-  const renewAccount = (accountId: string) => {
-    const account = accounts.find(acc => acc.id === accountId);
+    const account = accounts.find(a => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
     }
 
-    const newExpirationDate = addDays(new Date(account.expirationDate), 30).toISOString();
-    
-    const updatedAccounts = accounts.map(acc => {
-      if (acc.id !== accountId) return acc;
-      return {
-        ...acc,
-        expirationDate: newExpirationDate,
-        status: 'activa' as const
-      };
-    });
+    try {
+      const newEndDate = addDays(new Date(profile.endDate || new Date()), 30).toISOString();
+      await updateProfileMutation.mutateAsync({
+        id: profileId,
+        updates: {
+          endDate: newEndDate,
+          price: renewalPrice,
+        },
+      });
 
-    setAccounts(updatedAccounts);
-    addExpense({
-      description: `Renovación cuenta ${account.serviceName}`,
-      amount: account.cost,
-      type: 'gasto',
-      accountId,
-      date: new Date().toISOString()
-    });
-    
-    toast.success(`Cuenta ${account.serviceName} renovada exitosamente`);
-    return true;
+      await addExpense({
+        description: `Renovación ${profile.name} - ${account.serviceName}`,
+        amount: renewalPrice,
+        type: 'ganancia',
+        profileId,
+        accountId,
+        date: new Date().toISOString(),
+      });
+
+      toast.success('Perfil renovado exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al renovar el perfil');
+      return false;
+    }
   };
 
-  const updateProfile = (accountId: string, profileId: string, updates: Partial<Profile>) => {
-    const updatedAccounts = accounts.map(acc => {
-      if (acc.id !== accountId) return acc;
-      return {
-        ...acc,
-        profiles: acc.profiles.map(p => (p.id === profileId ? { ...p, ...updates } : p))
-      };
-    });
-    setAccounts(updatedAccounts);
-    toast.success('Perfil actualizado');
-    return true;
+  const renewAccount = async (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) {
+      toast.error('Cuenta no encontrada');
+      return false;
+    }
+
+    try {
+      const newExpirationDate = addDays(new Date(account.expirationDate), 30).toISOString();
+      await updateAccountMutation.mutateAsync({
+        id: accountId,
+        updates: {
+          expirationDate: newExpirationDate,
+          status: 'activa',
+        },
+      });
+
+      await addExpense({
+        description: `Renovación cuenta ${account.serviceName}`,
+        amount: account.cost,
+        type: 'gasto',
+        accountId,
+        date: new Date().toISOString(),
+      });
+
+      toast.success(`Cuenta ${account.serviceName} renovada exitosamente`);
+      return true;
+    } catch (error) {
+      toast.error('Error al renovar la cuenta');
+      return false;
+    }
   };
 
-  const updateSettings = (newSettings: Partial<AppSettings>) => {
-    setSettings({ ...settings, ...newSettings });
+  const updateProfile = async (accountId: string, profileId: string, updates: Partial<Profile>) => {
+    try {
+      await updateProfileMutation.mutateAsync({ id: profileId, updates });
+      toast.success('Perfil actualizado exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al actualizar el perfil');
+      return false;
+    }
+  };
+
+  const updateSettings = async (updates: Partial<AppSettings>) => {
+    try {
+      await updateSettingsMutation.mutateAsync(updates);
+      toast.success('Configuración actualizada');
+    } catch (error) {
+      toast.error('Error al actualizar la configuración');
+    }
   };
 
   const getAllProfiles = () => {
-    const allProfiles: Array<Profile & { accountId: string; accountName: string }> = [];
-    accounts.forEach(account => {
-      account.profiles.forEach(profile => {
-        if (profile.status !== 'disponible') {
-          allProfiles.push({
-            ...profile,
-            accountId: account.id,
-            accountName: account.serviceName
-          });
-        }
-      });
+    return profiles.map(profile => {
+      const account = accounts.find(a => a.id === profile.accountId);
+      return {
+        ...profile,
+        accountName: account?.serviceName || 'Desconocido',
+      };
     });
-    return allProfiles;
   };
 
   const getStats = () => {
-    let totalSales = 0;
-    let totalExpenses = 0;
-    let activeAccounts = 0;
-    let expiringSoon = 0;
+    const totalSales = expenses
+      .filter(e => e.type === 'ganancia')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses = expenses
+      .filter(e => e.type === 'gasto')
+      .reduce((sum, e) => sum + e.amount, 0);
+    const netProfit = totalSales - totalExpenses;
+    const activeAccounts = accounts.filter(a => a.status === 'activa').length;
+    const expiringSoon = accounts.filter(a => {
+      const daysUntilExpiry = differenceInDays(new Date(a.expirationDate), new Date());
+      return daysUntilExpiry >= 0 && daysUntilExpiry <= 7;
+    }).length;
 
-    expenses.forEach(exp => {
-      if (exp.type === 'ganancia') {
-        totalSales += exp.amount;
-      } else {
-        totalExpenses += exp.amount;
-      }
-    });
-
-    accounts.forEach(acc => {
-      if (acc.status === 'activa') activeAccounts++;
-      if (acc.status === 'por vencer') expiringSoon++;
-    });
-
-    return {
-      totalSales,
-      totalExpenses,
-      netProfit: totalSales - totalExpenses,
-      activeAccounts,
-      expiringSoon
-    };
+    return { totalSales, totalExpenses, netProfit, activeAccounts, expiringSoon };
   };
 
-  const getServiceColor = (serviceName: string): string => {
+  const getServiceColor = (serviceName: string) => {
     const service = services.find(s => s.name === serviceName);
-    return service?.color || '#7B68EE';
+    return service?.color || '#6366f1';
   };
 
-  const getMaxProfilesByService = (serviceName: ServiceType): number => {
+  const getMaxProfilesByService = (serviceName: ServiceType) => {
     const service = services.find(s => s.name === serviceName);
     return service?.maxProfiles || 7;
   };
 
-  const deleteService = (id: string) => {
-    setServices(services.filter(s => s.id !== id));
-    toast.success('Servicio eliminado');
-  };
-
-  const deleteProfile = (accountId: string, profileId: string) => {
-    const updatedAccounts = accounts.map(acc => {
-      if (acc.id !== accountId) return acc;
-      return {
-        ...acc,
-        profiles: acc.profiles.filter(p => p.id !== profileId)
-      };
-    });
-    setAccounts(updatedAccounts);
-    toast.success('Perfil eliminado');
-  };
-
-  const sendTelegramTestNotification = async (botToken: string, chatId: string): Promise<boolean> => {
+  const deleteService = async (id: string) => {
     try {
+      await deleteServiceMutation.mutateAsync(id);
+      toast.success('Servicio eliminado');
+    } catch (error) {
+      toast.error('Error al eliminar el servicio');
+    }
+  };
+
+  const deleteProfile = async (accountId: string, profileId: string) => {
+    try {
+      await deleteProfileMutation.mutateAsync(profileId);
+      toast.success('Perfil eliminado');
+    } catch (error) {
+      toast.error('Error al eliminar el perfil');
+    }
+  };
+
+  const sendTelegramTestNotification = async (botToken: string, chatId: string) => {
+    try {
+      const message = '✅ Configuración de Telegram exitosa! NEXVIA puede enviar notificaciones.';
       const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: '✅ Notificación de prueba desde Nexvia\n\nSi ves este mensaje, tu configuración de Telegram es correcta.',
-          parse_mode: 'HTML'
-        })
+        body: JSON.stringify({ chat_id: chatId, text: message }),
       });
-      
-      if (response.ok) {
-        toast.success('Notificación de prueba enviada a Telegram');
-        return true;
-      } else {
-        const error = await response.json();
-        toast.error(`Error: ${error.description || 'No se pudo enviar la notificación'}`);
-        return false;
-      }
+      const data = await response.json();
+      return data.ok;
     } catch (error) {
-      toast.error('Error al conectar con Telegram');
       return false;
     }
   };
 
-  const renewAccountMaster = (accountId: string, renewalDays: number, cost: number): boolean => {
+  const renewAccountMaster = async (accountId: string, renewalDays: number, cost: number) => {
     const account = accounts.find(a => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
     }
 
-    const newExpirationDate = addDays(new Date(account.expirationDate), renewalDays).toISOString();
-    setAccounts(accounts.map(acc => 
-      acc.id === accountId 
-        ? { ...acc, expirationDate: newExpirationDate, status: 'activa' as const }
-        : acc
-    ));
+    try {
+      const newExpirationDate = addDays(new Date(account.expirationDate), renewalDays).toISOString();
+      await updateAccountMutation.mutateAsync({
+        id: accountId,
+        updates: {
+          expirationDate: newExpirationDate,
+          status: 'activa',
+        },
+      });
 
-    addExpense({
-      description: `Renovación cuenta maestra ${account.serviceName}`,
-      amount: cost,
-      type: 'gasto',
-      accountId,
-      date: new Date().toISOString(),
-      reference: `RENEW_ACCOUNT_${accountId}`
-    });
+      await addExpense({
+        description: `Renovación cuenta ${account.serviceName} (${renewalDays} días)`,
+        amount: cost,
+        type: 'gasto',
+        accountId,
+        date: new Date().toISOString(),
+      });
 
-    toast.success(`Cuenta ${account.serviceName} renovada por ${renewalDays} días`);
-    return true;
+      toast.success(`Cuenta renovada por ${renewalDays} días`);
+      return true;
+    } catch (error) {
+      toast.error('Error al renovar la cuenta');
+      return false;
+    }
   };
 
-  const renewProfileSale = (accountId: string, profileId: string, renewalDays: number, cost: number): boolean => {
+  const renewProfileSale = async (accountId: string, profileId: string, renewalDays: number, cost: number) => {
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile || profile.status !== 'activo') {
+      toast.error('Este perfil no puede renovarse');
+      return false;
+    }
+
     const account = accounts.find(a => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
     }
 
-    const profile = account.profiles.find(p => p.id === profileId);
-    if (!profile || !profile.endDate) {
-      toast.error('Perfil no encontrado o no tiene fecha de vencimiento');
+    try {
+      const newEndDate = addDays(new Date(profile.endDate || new Date()), renewalDays).toISOString();
+      await updateProfileMutation.mutateAsync({
+        id: profileId,
+        updates: {
+          endDate: newEndDate,
+        },
+      });
+
+      await addExpense({
+        description: `Renovación ${profile.name} - ${account.serviceName} (${renewalDays} días)`,
+        amount: cost,
+        type: 'ganancia',
+        profileId,
+        accountId,
+        date: new Date().toISOString(),
+      });
+
+      toast.success(`Perfil renovado por ${renewalDays} días`);
+      return true;
+    } catch (error) {
+      toast.error('Error al renovar el perfil');
+      return false;
+    }
+  };
+
+  const processRefund = async (profileId: string, amount: number, reason: string) => {
+    const profile = profiles.find(p => p.id === profileId);
+    if (!profile) {
+      toast.error('Perfil no encontrado');
       return false;
     }
 
-    const newEndDate = addDays(new Date(profile.endDate), renewalDays).toISOString();
-    setAccounts(accounts.map(acc => 
-      acc.id === accountId
-        ? {
-            ...acc,
-            profiles: acc.profiles.map(p => 
-              p.id === profileId
-                ? { ...p, endDate: newEndDate, status: 'activo' as const }
-                : p
-            )
-          }
-        : acc
-    ));
-
-    addExpense({
-      description: `Renovación perfil ${profile.name} - ${profile.clientId}`,
-      amount: cost,
-      type: 'ganancia',
-      profileId,
-      accountId,
-      date: new Date().toISOString(),
-      reference: `RENEW_PROFILE_${profileId}`
-    });
-
-    toast.success(`Perfil renovado por ${renewalDays} días`);
-    return true;
-  };
-
-  const processRefund = (profileId: string, amount: number, reason: string): boolean => {
-    if (!profileId || amount <= 0) {
-      toast.error('Datos inválidos para la devolución');
+    const account = accounts.find(a => a.id === profile.accountId);
+    if (!account) {
+      toast.error('Cuenta no encontrada');
       return false;
     }
 
-    addExpense({
-      description: `Devolución: ${reason}`,
-      amount,
-      type: 'gasto',
-      profileId,
-      date: new Date().toISOString(),
-      note: reason,
-      reference: `REFUND_${profileId}`
-    });
+    try {
+      await updateProfileMutation.mutateAsync({
+        id: profileId,
+        updates: {
+          status: 'disponible',
+          clientId: null,
+          name: 'Disponible',
+          phone: null,
+          pin: null,
+          price: null,
+          startDate: null,
+          endDate: null,
+        },
+      });
 
-    toast.success('Devolución registrada exitosamente');
-    return true;
+      await addExpense({
+        description: `Devolución - ${reason}`,
+        amount: -amount,
+        type: 'gasto',
+        profileId,
+        accountId: account.id,
+        note: reason,
+        date: new Date().toISOString(),
+      });
+
+      toast.success('Devolución procesada exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al procesar la devolución');
+      return false;
+    }
   };
 
-  const recordAdjustment = (description: string, amount: number, reference: string): void => {
-    addExpense({
-      description: `Ajuste: ${description}`,
-      amount,
-      type: 'ajuste',
-      date: new Date().toISOString(),
-      reference
-    });
-    toast.success('Ajuste registrado');
+  const recordAdjustment = async (description: string, amount: number, reference: string) => {
+    try {
+      await addExpense({
+        description,
+        amount,
+        type: 'ajuste',
+        reference,
+        date: new Date().toISOString(),
+      });
+      toast.success('Ajuste registrado exitosamente');
+    } catch (error) {
+      toast.error('Error al registrar el ajuste');
+    }
   };
 
   return (
-    <StreamingContext.Provider value={{ 
-      accounts, 
-      clients, 
-      expenses,
-      services,
-      settings,
-      addAccount, 
-      updateAccount, 
-      deleteAccount, 
-      sellProfile,
-      renewProfile,
-      renewAccount,
-      updateProfile,
-      addClient,
-      addExpense,
-      addService,
-      updateService,
-      updateSettings,
-      getAllProfiles,
-      getStats,
-      getServiceColor,
-      getMaxProfilesByService,
-      deleteService,
-      deleteProfile,
-      sendTelegramTestNotification,
-      renewAccountMaster,
-      renewProfileSale,
-      processRefund,
-      recordAdjustment
-    }}>
+    <StreamingContext.Provider
+      value={{
+        accounts,
+        clients,
+        expenses,
+        services,
+        profiles,
+        settings,
+        isLoading,
+        addAccount,
+        updateAccount,
+        deleteAccount,
+        sellProfile,
+        renewProfile,
+        renewAccount,
+        updateProfile,
+        addClient,
+        addExpense,
+        addService,
+        updateService,
+        updateSettings,
+        getAllProfiles,
+        getStats,
+        getServiceColor,
+        getMaxProfilesByService,
+        deleteService,
+        deleteProfile,
+        sendTelegramTestNotification,
+        renewAccountMaster,
+        renewProfileSale,
+        processRefund,
+        recordAdjustment,
+      }}
+    >
       {children}
     </StreamingContext.Provider>
   );
