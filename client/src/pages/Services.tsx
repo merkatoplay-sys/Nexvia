@@ -44,8 +44,9 @@ export default function Services() {
     
     try {
       setIsUploading(true);
+      let finalImageUrl = imagePreview;
       
-      // If there's a new image to upload
+      // If there's a new image to upload (base64)
       if (imagePreview && imagePreview.startsWith('data:')) {
         const response = await fetch(`/api/services/${editingService.id}/image`, {
           method: 'POST',
@@ -58,15 +59,26 @@ export default function Services() {
           const error = await response.json();
           throw new Error(error.message || 'Error al subir imagen');
         }
+        
+        const result = await response.json();
+        finalImageUrl = result.imageUrl;
       }
       
-      // Update service data
-      await updateService(editingService.id, { 
+      // Update service data (excluding imageUrl if image was just uploaded, as it's already updated)
+      const updateData: any = { 
         name: editData.name, 
         color: editData.color, 
-        maxProfiles: editData.maxProfiles,
-        imageUrl: imagePreview === null ? null : (imagePreview?.startsWith('data:') ? editData.imageUrl : imagePreview)
-      });
+        maxProfiles: editData.maxProfiles
+      };
+      
+      // Only include imageUrl if we're removing it (null) or keeping existing URL
+      if (imagePreview === null) {
+        updateData.imageUrl = null;
+      } else if (!imagePreview?.startsWith('data:') && imagePreview !== editingService.imageUrl) {
+        updateData.imageUrl = finalImageUrl;
+      }
+      
+      await updateService(editingService.id, updateData);
       
       toast.success('Servicio actualizado');
       setEditingService(null);
