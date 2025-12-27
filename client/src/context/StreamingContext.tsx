@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { useAuth } from './AuthContext';
 import { addDays, subDays, isBefore, isAfter, parseISO, differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -6,6 +7,7 @@ export type ServiceType = string;
 
 export interface Service {
   id: string;
+  userId?: string;
   name: string;
   color: string;
   maxProfiles: number;
@@ -14,6 +16,7 @@ export interface Service {
 
 export interface Profile {
   id: string;
+  userId?: string;
   name: string;
   phone?: string;
   pin?: string;
@@ -26,6 +29,7 @@ export interface Profile {
 
 export interface Account {
   id: string;
+  userId?: string;
   serviceName: ServiceType;
   email: string;
   password?: string;
@@ -41,6 +45,7 @@ export interface Account {
 
 export interface Client {
   id: string;
+  userId?: string;
   name: string;
   phone: string;
   notes?: string;
@@ -48,6 +53,7 @@ export interface Client {
 
 export interface Expense {
   id: string;
+  userId?: string;
   description: string;
   amount: number;
   type: 'ganancia' | 'gasto' | 'ajuste';
@@ -198,6 +204,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuth();
+  const currentUserId = user?.id || 'admin-tenant-id-001';
+
   const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [expenses, setExpenses] = useState<Expense[]>(MOCK_EXPENSES);
@@ -214,8 +223,21 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const id = Math.random().toString(36).substr(2, 9);
+    
+    // Add userId to profiles too
+    const profilesWithUser = newAccount.profiles.map(p => ({
+      ...p,
+      userId: currentUserId
+    }));
+
     toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
-    setAccounts([...accounts, { ...newAccount, id, status: 'activa' }]);
+    setAccounts([...accounts, { 
+      ...newAccount, 
+      id, 
+      status: 'activa',
+      userId: currentUserId,
+      profiles: profilesWithUser
+    }]);
     return true;
   };
 
@@ -244,13 +266,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const addClient = (client: Omit<Client, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    setClients([...clients, { ...client, id }]);
+    setClients([...clients, { ...client, id, userId: currentUserId }]);
     return id;
   };
 
   const addExpense = (expense: Omit<Expense, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    setExpenses([...expenses, { ...expense, id }]);
+    setExpenses([...expenses, { ...expense, id, userId: currentUserId }]);
   };
 
   const addService = (service: Omit<Service, 'id'>) => {
@@ -263,7 +285,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
     const id = Math.random().toString(36).substr(2, 9);
-    setServices([...services, { ...service, id }]);
+    setServices([...services, { ...service, id, userId: currentUserId }]);
     toast.success(`Servicio "${service.name}" creado exitosamente`);
     return true;
   };
