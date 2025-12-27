@@ -13,8 +13,8 @@ export default function Sales() {
   const { accounts, clients, sellProfile } = useStreaming();
   const [selectedService, setSelectedService] = useState<string>('');
   const [isSellDialogOpen, setIsSellDialogOpen] = useState(false);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
   
   const [saleData, setSaleData] = useState({
     name: '',
@@ -32,12 +32,12 @@ export default function Sales() {
   const selectedAccount = accounts.find(acc => acc.id === selectedAccountId);
   const availableProfiles = selectedAccount?.profiles.filter(p => p.status === 'disponible') || [];
 
-  const handleSellProfile = () => {
-    if (!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate || !saleData.startDate) {
+  const handleSellProfile = async () => {
+    if (selectedAccountId === null || selectedProfileId === null || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate || !saleData.startDate) {
       return;
     }
 
-    const success = sellProfile(selectedAccountId, selectedProfileId, {
+    const success = await sellProfile(selectedAccountId, selectedProfileId, {
       name: saleData.name,
       phone: saleData.phone,
       pin: saleData.pin,
@@ -49,8 +49,8 @@ export default function Sales() {
     if (success) {
       setIsSellDialogOpen(false);
       setSaleData({ name: '', phone: '', pin: '', price: 0, startDate: format(new Date(), 'yyyy-MM-dd'), endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd') });
-      setSelectedAccountId('');
-      setSelectedProfileId('');
+      setSelectedAccountId(null);
+      setSelectedProfileId(null);
     }
   };
 
@@ -92,7 +92,7 @@ export default function Sales() {
               {selectedService && (
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Cuenta Maestra</label>
-                  <Select onValueChange={setSelectedAccountId} value={selectedAccountId}>
+                  <Select onValueChange={(val) => setSelectedAccountId(parseInt(val))} value={selectedAccountId?.toString() ?? ''}>
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Selecciona una cuenta" />
                     </SelectTrigger>
@@ -100,7 +100,7 @@ export default function Sales() {
                       {filteredAccounts.map(acc => {
                         const availCount = acc.profiles.filter(p => p.status === 'disponible').length;
                         return (
-                          <SelectItem key={acc.id} value={acc.id} disabled={availCount === 0}>
+                          <SelectItem key={acc.id} value={acc.id.toString()} disabled={availCount === 0}>
                             {acc.email} ({availCount} disponibles)
                           </SelectItem>
                         );
@@ -111,16 +111,16 @@ export default function Sales() {
               )}
 
               {/* Seleccionar Perfil */}
-              {selectedAccountId && (
+              {selectedAccountId !== null && (
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Perfil Disponible</label>
-                  <Select onValueChange={setSelectedProfileId} value={selectedProfileId}>
+                  <Select onValueChange={(val) => setSelectedProfileId(parseInt(val))} value={selectedProfileId?.toString() ?? ''}>
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Selecciona un perfil" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {availableProfiles.map(prof => (
-                        <SelectItem key={prof.id} value={prof.id}>{prof.name}</SelectItem>
+                        <SelectItem key={prof.id} value={prof.id.toString()}>{prof.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -191,7 +191,7 @@ export default function Sales() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsSellDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleSellProfile} className="bg-primary text-white" disabled={!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate || !saleData.startDate}>
+              <Button onClick={handleSellProfile} className="bg-primary text-white" disabled={selectedAccountId === null || selectedProfileId === null || !saleData.name || !saleData.phone || !saleData.price || !saleData.endDate || !saleData.startDate}>
                 Confirmar Venta
               </Button>
             </DialogFooter>
@@ -283,6 +283,7 @@ export default function Sales() {
                     <Button 
                       className="w-full bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
                       onClick={() => {
+                        setSelectedService(account.serviceName);
                         setSelectedAccountId(account.id);
                         setIsSellDialogOpen(true);
                       }}
