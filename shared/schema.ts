@@ -15,6 +15,7 @@ export const services = pgTable("services", {
   color: varchar("color", { length: 7 }).notNull(),
   maxProfiles: integer("max_profiles").notNull().default(7),
   isCustom: boolean("is_custom").notNull().default(false),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

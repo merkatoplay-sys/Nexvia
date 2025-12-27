@@ -13,6 +13,8 @@ import {
 } from "./auth";
 import { storage } from "./storage";
 import { insertUserSchema, loginSchema } from "@shared/schema";
+import path from "path";
+import fs from "fs";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -162,6 +164,55 @@ export async function registerRoutes(
       res.status(500).json({ message: "Failed to delete service" });
     }
   });
+
+  // Service image upload endpoint
+  app.post("/api/services/:id/image", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const serviceId = req.params.id;
+      
+      // Get base64 image data from request body
+      const { imageData } = req.body;
+      if (!imageData) {
+        return res.status(400).json({ message: "No se proporcionó imagen" });
+      }
+
+      // Extract base64 data and file type
+      const matches = imageData.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/);
+      if (!matches) {
+        return res.status(400).json({ message: "Formato de imagen no válido. Use PNG o JPG" });
+      }
+
+      const extension = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+      const base64Data = matches[2];
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      // Create uploads directory if it doesn't exist
+      const uploadsDir = path.join(process.cwd(), 'uploads', 'services');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      // Generate unique filename
+      const filename = `${serviceId}-${Date.now()}.${extension}`;
+      const filepath = path.join(uploadsDir, filename);
+
+      // Write file
+      fs.writeFileSync(filepath, buffer);
+
+      // Update service with image URL
+      const imageUrl = `/uploads/services/${filename}`;
+      const service = await storage.updateService(serviceId, userId, { imageUrl });
+
+      res.json({ imageUrl, service });
+    } catch (error) {
+      console.error("Error uploading service image:", error);
+      res.status(500).json({ message: "Error al subir imagen" });
+    }
+  });
+
+  // Serve uploaded files
+  app.use('/uploads', (await import('express')).default.static(path.join(process.cwd(), 'uploads')));
 
   // Accounts routes
   app.get("/api/accounts", isAuthenticated, async (req, res) => {
