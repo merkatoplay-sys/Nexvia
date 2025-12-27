@@ -1,21 +1,125 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { type Server } from "http";
+import cookieParser from "cookie-parser";
+import { 
+  isAuthenticated, 
+  getUserId, 
+  getUserByEmail, 
+  createUser, 
+  comparePassword, 
+  generateToken,
+  toSafeUser,
+  getUserById
+} from "./auth";
 import { storage } from "./storage";
+import { insertUserSchema, loginSchema } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Setup auth FIRST (before any other routes)
-  await setupAuth(app);
-  registerAuthRoutes(app);
+  // Add cookie parser middleware
+  app.use(cookieParser());
 
-  // Helper to get userId from request
-  const getUserId = (req: any): string => req.user.claims.sub;
+  // Auth routes
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const result = insertUserSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: result.error.errors[0]?.message || "Datos inválidos" 
+        });
+      }
+
+      const { email, password, firstName, lastName } = result.data;
+
+      // Check if user exists
+      const existingUser = await getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "Este email ya está registrado" });
+      }
+
+      // Create user
+      const user = await createUser(email, password, firstName ?? undefined, lastName ?? undefined);
+      const token = generateToken(user.id, user.email);
+
+      // Set cookie
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      res.json({ user: toSafeUser(user), token });
+    } catch (error) {
+      console.error("Error en registro:", error);
+      res.status(500).json({ message: "Error al registrar usuario" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const result = loginSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: result.error.errors[0]?.message || "Datos inválidos" 
+        });
+      }
+
+      const { email, password } = result.data;
+
+      // Find user
+      const user = await getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      // Verify password
+      const isValid = await comparePassword(password, user.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      // Generate token
+      const token = generateToken(user.id, user.email);
+
+      // Set cookie
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      });
+
+      res.json({ user: toSafeUser(user), token });
+    } catch (error) {
+      console.error("Error en login:", error);
+      res.status(500).json({ message: "Error al iniciar sesión" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    res.clearCookie("token");
+    res.json({ message: "Sesión cerrada" });
+  });
+
+  app.get("/api/auth/me", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const user = await getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      res.json(toSafeUser(user));
+    } catch (error) {
+      console.error("Error obteniendo usuario:", error);
+      res.status(500).json({ message: "Error al obtener usuario" });
+    }
+  });
 
   // Services routes
-  app.get("/api/services", isAuthenticated, async (req: any, res) => {
+  app.get("/api/services", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const services = await storage.getServices(userId);
@@ -26,7 +130,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/services", isAuthenticated, async (req: any, res) => {
+  app.post("/api/services", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const service = await storage.createService({ ...req.body, userId });
@@ -37,7 +141,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/services/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/services/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const service = await storage.updateService(req.params.id, userId, req.body);
@@ -48,7 +152,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/services/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/services/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       await storage.deleteService(req.params.id, userId);
@@ -60,7 +164,7 @@ export async function registerRoutes(
   });
 
   // Accounts routes
-  app.get("/api/accounts", isAuthenticated, async (req: any, res) => {
+  app.get("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const accounts = await storage.getAccounts(userId);
@@ -71,7 +175,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/accounts", isAuthenticated, async (req: any, res) => {
+  app.post("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const account = await storage.createAccount({ ...req.body, userId });
@@ -82,7 +186,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/accounts/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const account = await storage.updateAccount(req.params.id, userId, req.body);
@@ -93,7 +197,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/accounts/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       await storage.deleteAccount(req.params.id, userId);
@@ -105,7 +209,7 @@ export async function registerRoutes(
   });
 
   // Profiles routes
-  app.get("/api/profiles", isAuthenticated, async (req: any, res) => {
+  app.get("/api/profiles", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const profiles = await storage.getProfiles(userId);
@@ -116,7 +220,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/profiles", isAuthenticated, async (req: any, res) => {
+  app.post("/api/profiles", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const profile = await storage.createProfile({ ...req.body, userId });
@@ -127,7 +231,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/profiles/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const profile = await storage.updateProfile(req.params.id, userId, req.body);
@@ -138,7 +242,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/profiles/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       await storage.deleteProfile(req.params.id, userId);
@@ -150,7 +254,7 @@ export async function registerRoutes(
   });
 
   // Clients routes
-  app.get("/api/clients", isAuthenticated, async (req: any, res) => {
+  app.get("/api/clients", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const clients = await storage.getClients(userId);
@@ -161,7 +265,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/clients", isAuthenticated, async (req: any, res) => {
+  app.post("/api/clients", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const client = await storage.createClient({ ...req.body, userId });
@@ -173,7 +277,7 @@ export async function registerRoutes(
   });
 
   // Expenses routes
-  app.get("/api/expenses", isAuthenticated, async (req: any, res) => {
+  app.get("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const expenses = await storage.getExpenses(userId);
@@ -184,7 +288,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/expenses", isAuthenticated, async (req: any, res) => {
+  app.post("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const expense = await storage.createExpense({ ...req.body, userId });
@@ -196,7 +300,7 @@ export async function registerRoutes(
   });
 
   // Settings routes
-  app.get("/api/settings", isAuthenticated, async (req: any, res) => {
+  app.get("/api/settings", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const settings = await storage.getSettings(userId);
@@ -207,7 +311,7 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/settings", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/settings", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const settings = await storage.updateSettings(userId, req.body);
