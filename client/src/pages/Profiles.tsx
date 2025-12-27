@@ -2,20 +2,21 @@ import { useStreaming } from '@/context/StreamingContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Edit, RotateCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Edit, RotateCw, Trash2, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { useState } from 'react';
-import { format, differenceInDays } from 'date-fns';
+import { differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Profiles() {
-  const { accounts, clients, updateProfile, renewProfile, deleteProfile, getServiceColor } = useStreaming();
+  const { accounts, clients, updateProfile, renewProfile, deleteProfile } = useStreaming();
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
-  const [editingPrice, setEditingPrice] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; accountId: string; profileId: string; name: string }>({ open: false, accountId: '', profileId: '', name: '' });
 
   const handleEdit = (profile: any, accountId: string) => {
     setEditingId(profile.id + accountId);
@@ -37,7 +38,13 @@ export default function Profiles() {
       price: editData.price || undefined
     });
     setEditingId(null);
-    setEditingPrice(false);
+  };
+
+  const handleDeleteProfile = async () => {
+    if (deleteConfirm.accountId && deleteConfirm.profileId) {
+      await deleteProfile(deleteConfirm.accountId, deleteConfirm.profileId);
+      setDeleteConfirm({ open: false, accountId: '', profileId: '', name: '' });
+    }
   };
 
   const getClientName = (clientId?: string) => {
@@ -45,7 +52,7 @@ export default function Profiles() {
     return clients.find(c => c.id === clientId)?.name || 'Desconocido';
   };
 
-  const activeProfiles = accounts.flatMap(a => a.profiles.filter(p => p.status !== 'disponible').map(p => ({ ...p, accountId: a.id, accountName: a.serviceName })));
+  const totalActiveProfiles = accounts.reduce((sum, a) => sum + a.profiles.filter(p => p.status !== 'disponible').length, 0);
 
   return (
     <motion.div 
@@ -61,8 +68,22 @@ export default function Profiles() {
       <div className="space-y-4">
         {accounts.length === 0 ? (
           <Card className="glass-card">
-            <CardContent className="pt-8 text-center">
-              <p className="text-muted-foreground">No hay cuentas maestras</p>
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <Users className="h-16 w-16 text-muted-foreground mb-4" />
+              <h3 className="text-xl font-semibold text-white mb-2">No hay cuentas maestras</h3>
+              <p className="text-muted-foreground text-center">
+                Primero debes crear una cuenta maestra desde la sección "Cuentas" para poder gestionar perfiles.
+              </p>
+            </CardContent>
+          </Card>
+        ) : totalActiveProfiles === 0 ? (
+          <Card className="glass-card">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <Users className="h-16 w-16 text-muted-foreground mb-4" />
+              <h3 className="text-xl font-semibold text-white mb-2">No hay perfiles activos</h3>
+              <p className="text-muted-foreground text-center">
+                Aún no has vendido ningún perfil. Ve a la sección "Ventas" para asignar perfiles a tus clientes.
+              </p>
             </CardContent>
           </Card>
         ) : (
@@ -70,13 +91,15 @@ export default function Profiles() {
             const accountProfiles = account.profiles.filter(p => p.status !== 'disponible');
             const isExpanded = expandedAccount === account.id;
 
+            if (accountProfiles.length === 0) return null;
+
             return (
               <motion.div
                 key={account.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                <Card className="glass-card">
+                <Card className="glass-card" data-testid={`card-account-profiles-${account.id}`}>
                   <CardHeader className="bg-white/5 border-b border-white/5">
                     <div 
                       className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-2 rounded transition-colors"
@@ -105,178 +128,171 @@ export default function Profiles() {
 
                   {isExpanded && (
                     <CardContent className="pt-4 space-y-4">
-                      {accountProfiles.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No hay perfiles activos en esta cuenta</p>
-                      ) : (
-                        accountProfiles.map((profile) => {
-                          const daysLeft = profile.endDate ? differenceInDays(new Date(profile.endDate), new Date()) : 0;
-                          const canRenew = daysLeft <= 1;
-                          const isEditing = editingId === profile.id + account.id;
+                      {accountProfiles.map((profile) => {
+                        const daysLeft = profile.endDate ? differenceInDays(new Date(profile.endDate), new Date()) : 0;
+                        const canRenew = daysLeft <= 1;
+                        const isEditing = editingId === profile.id + account.id;
 
-                          return (
-                            <motion.div
-                              key={profile.id}
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-4"
-                            >
-                              <div className="grid md:grid-cols-2 gap-4">
-                                {/* Columna 1 */}
-                                <div className="space-y-3">
-                                  {isEditing ? (
-                                    <div className="space-y-2">
-                                      <label className="text-xs text-muted-foreground">Nombre del Perfil</label>
-                                      <Input
-                                        className="glass-input"
-                                        value={editData.name}
-                                        onChange={e => setEditData({...editData, name: e.target.value})}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Nombre</p>
-                                      <p className="text-lg font-medium text-white">{profile.name}</p>
-                                    </div>
-                                  )}
-
-                                  {isEditing ? (
-                                    <div className="space-y-2">
-                                      <label className="text-xs text-muted-foreground">Teléfono</label>
-                                      <Input
-                                        className="glass-input"
-                                        value={editData.phone}
-                                        onChange={e => setEditData({...editData, phone: e.target.value})}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Teléfono</p>
-                                      <p className="text-sm text-white">{profile.phone || 'No especificado'}</p>
-                                    </div>
-                                  )}
-
-                                  {isEditing ? (
-                                    <div className="space-y-2">
-                                      <label className="text-xs text-muted-foreground">PIN</label>
-                                      <Input
-                                        className="glass-input"
-                                        value={editData.pin}
-                                        onChange={e => setEditData({...editData, pin: e.target.value})}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <p className="text-xs text-muted-foreground mb-1">PIN</p>
-                                      <p className="text-sm text-white">{profile.pin ? '••••' : 'No configurado'}</p>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Columna 2 */}
-                                <div className="space-y-3">
-                                  {isEditing ? (
-                                    <div className="space-y-2">
-                                      <label className="text-xs text-muted-foreground">Cliente Asignado</label>
-                                      <Select value={editData.clientId} onValueChange={val => setEditData({...editData, clientId: val})}>
-                                        <SelectTrigger className="glass-input">
-                                          <SelectValue placeholder="Seleccionar cliente" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-popover border-white/10 text-white">
-                                          <SelectItem value="">Sin asignar</SelectItem>
-                                          {clients.map(c => (
-                                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                                      <p className="text-sm text-white">{getClientName(profile.clientId)}</p>
-                                    </div>
-                                  )}
-
-                                  {isEditing ? (
-                                    <div className="space-y-2">
-                                      <label className="text-xs text-muted-foreground">Precio</label>
-                                      <Input
-                                        type="number"
-                                        className="glass-input"
-                                        value={editData.price}
-                                        onChange={e => setEditData({...editData, price: parseFloat(e.target.value)})}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Precio</p>
-                                      <p className="text-sm font-medium text-white">${profile.price || '0'}</p>
-                                    </div>
-                                  )}
-
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Estado</p>
-                                    <Badge className={
-                                      daysLeft > 5 ? 'bg-emerald-500/20 text-emerald-400' :
-                                      daysLeft > 1 ? 'bg-yellow-500/20 text-yellow-400' :
-                                      'bg-red-500/20 text-red-400'
-                                    }>
-                                      {daysLeft} días
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Botones de Acción */}
-                              <div className="flex gap-2 flex-wrap pt-2 border-t border-white/5">
+                        return (
+                          <motion.div
+                            key={profile.id}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-4"
+                            data-testid={`card-profile-${profile.id}`}
+                          >
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div className="space-y-3">
                                 {isEditing ? (
-                                  <>
-                                    <Button
-                                      onClick={() => handleSave(account.id, profile.id)}
-                                      className="bg-primary hover:bg-primary/90 text-white h-8 text-sm"
-                                    >
-                                      Guardar Cambios
-                                    </Button>
-                                    <Button
-                                      onClick={() => setEditingId(null)}
-                                      variant="outline"
-                                      className="border-white/10 hover:bg-white/5 text-white h-8 text-sm"
-                                    >
-                                      Cancelar
-                                    </Button>
-                                  </>
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">Nombre del Perfil</label>
+                                    <Input
+                                      className="glass-input"
+                                      value={editData.name}
+                                      onChange={e => setEditData({...editData, name: e.target.value})}
+                                    />
+                                  </div>
                                 ) : (
-                                  <>
-                                    <Button
-                                      onClick={() => handleEdit(profile, account.id)}
-                                      className="bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 h-8 text-sm"
-                                    >
-                                      <Edit className="h-3 w-3 mr-1" /> Editar
-                                    </Button>
-                                    {canRenew && (
-                                      <Button
-                                        onClick={() => renewProfile(account.id, profile.id, profile.price || 5)}
-                                        className="bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400 h-8 text-sm"
-                                      >
-                                        <RotateCw className="h-3 w-3 mr-1" /> Renovar
-                                      </Button>
-                                    )}
-                                    <Button
-                                      onClick={() => {
-                                        if (confirm(`¿Eliminar perfil ${profile.name}?`)) {
-                                          deleteProfile(account.id, profile.id);
-                                        }
-                                      }}
-                                      className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-sm"
-                                    >
-                                      <Trash2 className="h-3 w-3 mr-1" /> Eliminar
-                                    </Button>
-                                  </>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Nombre</p>
+                                    <p className="text-lg font-medium text-white">{profile.name}</p>
+                                  </div>
+                                )}
+
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">Teléfono</label>
+                                    <Input
+                                      className="glass-input"
+                                      value={editData.phone}
+                                      onChange={e => setEditData({...editData, phone: e.target.value})}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Teléfono</p>
+                                    <p className="text-sm text-white">{profile.phone || 'No especificado'}</p>
+                                  </div>
+                                )}
+
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">PIN</label>
+                                    <Input
+                                      className="glass-input"
+                                      value={editData.pin}
+                                      onChange={e => setEditData({...editData, pin: e.target.value})}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">PIN</p>
+                                    <p className="text-sm text-white">{profile.pin ? '••••' : 'No configurado'}</p>
+                                  </div>
                                 )}
                               </div>
-                            </motion.div>
-                          );
-                        })
-                      )}
+
+                              <div className="space-y-3">
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">Cliente Asignado</label>
+                                    <Select value={editData.clientId} onValueChange={val => setEditData({...editData, clientId: val})}>
+                                      <SelectTrigger className="glass-input">
+                                        <SelectValue placeholder="Seleccionar cliente" />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-popover border-white/10 text-white">
+                                        <SelectItem value="">Sin asignar</SelectItem>
+                                        {clients.map(c => (
+                                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Cliente</p>
+                                    <p className="text-sm text-white">{getClientName(profile.clientId)}</p>
+                                  </div>
+                                )}
+
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">Precio</label>
+                                    <Input
+                                      type="number"
+                                      className="glass-input"
+                                      value={editData.price}
+                                      onChange={e => setEditData({...editData, price: parseFloat(e.target.value)})}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Precio</p>
+                                    <p className="text-sm font-medium text-white">${profile.price || '0'}</p>
+                                  </div>
+                                )}
+
+                                <div>
+                                  <p className="text-xs text-muted-foreground mb-1">Estado</p>
+                                  <Badge className={
+                                    daysLeft > 5 ? 'bg-emerald-500/20 text-emerald-400' :
+                                    daysLeft > 1 ? 'bg-yellow-500/20 text-yellow-400' :
+                                    'bg-red-500/20 text-red-400'
+                                  }>
+                                    {daysLeft} días
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 flex-wrap pt-2 border-t border-white/5">
+                              {isEditing ? (
+                                <>
+                                  <Button
+                                    onClick={() => handleSave(account.id, profile.id)}
+                                    className="bg-primary hover:bg-primary/90 text-white h-8 text-sm"
+                                  >
+                                    Guardar Cambios
+                                  </Button>
+                                  <Button
+                                    onClick={() => setEditingId(null)}
+                                    variant="outline"
+                                    className="border-white/10 hover:bg-white/5 text-white h-8 text-sm"
+                                  >
+                                    Cancelar
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Button
+                                    onClick={() => handleEdit(profile, account.id)}
+                                    className="bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 h-8 text-sm"
+                                    data-testid={`button-edit-profile-${profile.id}`}
+                                  >
+                                    <Edit className="h-3 w-3 mr-1" /> Editar
+                                  </Button>
+                                  {canRenew && (
+                                    <Button
+                                      onClick={() => renewProfile(account.id, profile.id, profile.price || 5)}
+                                      className="bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400 h-8 text-sm"
+                                      data-testid={`button-renew-profile-${profile.id}`}
+                                    >
+                                      <RotateCw className="h-3 w-3 mr-1" /> Renovar
+                                    </Button>
+                                  )}
+                                  <Button
+                                    onClick={() => setDeleteConfirm({ open: true, accountId: account.id, profileId: profile.id, name: profile.name })}
+                                    className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-sm"
+                                    data-testid={`button-delete-profile-${profile.id}`}
+                                  >
+                                    <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
                     </CardContent>
                   )}
                 </Card>
@@ -285,6 +301,17 @@ export default function Profiles() {
           })
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
+        title={`¿Eliminar perfil "${deleteConfirm.name}"?`}
+        description="Se eliminará el perfil y todos sus registros financieros asociados. El perfil quedará disponible para ser vendido nuevamente. Esta acción no se puede deshacer."
+        confirmText="Eliminar Perfil"
+        cancelText="Cancelar"
+        variant="destructive"
+        onConfirm={handleDeleteProfile}
+      />
     </motion.div>
   );
 }
