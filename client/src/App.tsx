@@ -2,6 +2,7 @@ import { Switch, Route, useLocation } from "wouter";
 import { StreamingProvider } from "@/context/StreamingContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { Toaster } from "@/components/ui/toaster";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Dashboard from "@/pages/Dashboard";
 import Accounts from "@/pages/Accounts";
 import AccountDetail from "@/pages/AccountDetail";
@@ -15,6 +16,15 @@ import Login from "@/pages/Login";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
   const { isAuthenticated } = useAuth();
@@ -69,12 +79,14 @@ function Router() {
 
 function App() {
   return (
-    <AuthProvider>
-      <StreamingProvider>
-        <Toaster />
-        <Router />
-      </StreamingProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <StreamingProvider>
+          <Toaster />
+          <Router />
+        </StreamingProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
