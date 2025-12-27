@@ -4,16 +4,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Edit, Trash2, Package } from 'lucide-react';
-import { useState } from 'react';
+import { Plus, Edit, Trash2, Package, Upload, X } from 'lucide-react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 export default function Services() {
   const { services, accounts, addService, updateService, deleteService } = useStreaming();
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingService, setEditingService] = useState<any>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: '', name: '' });
   const [newService, setNewService] = useState({ name: '', color: '#7B68EE', maxProfiles: 7 });
+  const [editData, setEditData] = useState({ name: '', color: '#7B68EE', maxProfiles: 7, imageUrl: '' });
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddService = () => {
     if (!newService.name) return;
@@ -23,11 +28,53 @@ export default function Services() {
     }
   };
 
-  const handleUpdateService = (id: string) => {
-    if (!newService.name) return;
-    if (updateService(id, { color: newService.color, maxProfiles: newService.maxProfiles })) {
-      setEditingId(null);
-      setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
+  const openEditDialog = (service: any) => {
+    setEditingService(service);
+    setEditData({ 
+      name: service.name, 
+      color: service.color, 
+      maxProfiles: service.maxProfiles,
+      imageUrl: service.imageUrl || ''
+    });
+    setImagePreview(service.imageUrl || null);
+  };
+
+  const handleUpdateService = async () => {
+    if (!editingService || !editData.name) return;
+    
+    try {
+      setIsUploading(true);
+      
+      // If there's a new image to upload
+      if (imagePreview && imagePreview.startsWith('data:')) {
+        const response = await fetch(`/api/services/${editingService.id}/image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ imageData: imagePreview })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Error al subir imagen');
+        }
+      }
+      
+      // Update service data
+      await updateService(editingService.id, { 
+        name: editData.name, 
+        color: editData.color, 
+        maxProfiles: editData.maxProfiles,
+        imageUrl: imagePreview === null ? null : (imagePreview?.startsWith('data:') ? editData.imageUrl : imagePreview)
+      });
+      
+      toast.success('Servicio actualizado');
+      setEditingService(null);
+      setImagePreview(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al actualizar servicio');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -38,9 +85,35 @@ export default function Services() {
     }
   };
 
-  const startEdit = (service: any) => {
-    setEditingId(service.id);
-    setNewService({ name: service.name, color: service.color, maxProfiles: service.maxProfiles });
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      toast.error('Solo se permiten imágenes PNG o JPG');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('La imagen no debe superar 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setImagePreview(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImagePreview(null);
+    setEditData({ ...editData, imageUrl: '' });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const getAccountCountForService = (serviceName: string) => {
@@ -50,6 +123,26 @@ export default function Services() {
   const item = {
     hidden: { y: 20, opacity: 0 },
     show: { y: 0, opacity: 1 }
+  };
+
+  const renderServiceIcon = (service: any) => {
+    if (service.imageUrl) {
+      return (
+        <img 
+          src={service.imageUrl} 
+          alt={service.name}
+          className="w-12 h-12 rounded-lg object-cover"
+        />
+      );
+    }
+    return (
+      <div 
+        className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold"
+        style={{ backgroundColor: service.color }}
+      >
+        {service.name.substring(0, 1)}
+      </div>
+    );
   };
 
   return (
@@ -152,12 +245,7 @@ export default function Services() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div 
-                          className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: service.color }}
-                        >
-                          {service.name.substring(0, 1)}
-                        </div>
+                        {renderServiceIcon(service)}
                         <div>
                           <CardTitle className="text-white text-lg">{service.name}</CardTitle>
                           {service.isCustom && <p className="text-xs text-muted-foreground">Personalizado</p>}
@@ -188,68 +276,26 @@ export default function Services() {
                         </div>
                       </div>
 
-                      {service.isCustom && (
-                        <div className="pt-2 flex gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={() => startEdit(service)}
-                                className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 h-8"
-                                data-testid={`button-edit-service-${service.id}`}
-                              >
-                                <Edit className="h-3 w-3 mr-1" /> Editar
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
-                              <DialogHeader>
-                                <DialogTitle>Editar Servicio</DialogTitle>
-                              </DialogHeader>
-                              <div className="grid gap-4 py-4">
-                                <div className="space-y-2">
-                                  <label className="text-xs text-muted-foreground">Color</label>
-                                  <div className="flex gap-2">
-                                    <input 
-                                      type="color" 
-                                      value={newService.color}
-                                      onChange={e => setNewService({...newService, color: e.target.value})}
-                                      className="w-12 h-10 rounded cursor-pointer"
-                                    />
-                                    <Input 
-                                      className="glass-input" 
-                                      value={newService.color} 
-                                      onChange={e => setNewService({...newService, color: e.target.value})}
-                                    />
-                                  </div>
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs text-muted-foreground">Máximo de Perfiles</label>
-                                  <Input 
-                                    type="number" 
-                                    className="glass-input" 
-                                    value={newService.maxProfiles} 
-                                    onChange={e => setNewService({...newService, maxProfiles: parseInt(e.target.value)})}
-                                  />
-                                </div>
-                              </div>
-                              <DialogFooter>
-                                <Button variant="outline" onClick={() => setEditingId(null)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-                                <Button onClick={() => handleUpdateService(service.id)} className="bg-primary text-white">Guardar Cambios</Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            onClick={() => setDeleteConfirm({ open: true, id: service.id, name: service.name })}
-                            className="flex-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8"
-                            data-testid={`button-delete-service-${service.id}`}
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" /> Eliminar
-                          </Button>
-                        </div>
-                      )}
+                      <div className="pt-2 flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => openEditDialog(service)}
+                          className="flex-1 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 h-8"
+                          data-testid={`button-edit-service-${service.id}`}
+                        >
+                          <Edit className="h-3 w-3 mr-1" /> Editar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => setDeleteConfirm({ open: true, id: service.id, name: service.name })}
+                          className="flex-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8"
+                          data-testid={`button-delete-service-${service.id}`}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -258,6 +304,118 @@ export default function Services() {
           })}
         </div>
       )}
+
+      {/* Edit Service Dialog */}
+      <Dialog open={!!editingService} onOpenChange={(open) => !open && setEditingService(null)}>
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle>Editar Servicio</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Nombre</label>
+              <Input 
+                className="glass-input" 
+                value={editData.name}
+                onChange={e => setEditData({...editData, name: e.target.value})}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Color</label>
+              <div className="flex gap-2">
+                <input 
+                  type="color" 
+                  value={editData.color}
+                  onChange={e => setEditData({...editData, color: e.target.value})}
+                  className="w-12 h-10 rounded cursor-pointer"
+                />
+                <Input 
+                  className="glass-input" 
+                  value={editData.color} 
+                  onChange={e => setEditData({...editData, color: e.target.value})}
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Máximo de Perfiles</label>
+              <Input 
+                type="number" 
+                className="glass-input" 
+                value={editData.maxProfiles} 
+                onChange={e => setEditData({...editData, maxProfiles: parseInt(e.target.value)})}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Logo / Imagen (opcional)</label>
+              <div className="flex items-center gap-4">
+                {imagePreview ? (
+                  <div className="relative">
+                    <img 
+                      src={imagePreview} 
+                      alt="Preview" 
+                      className="w-16 h-16 rounded-lg object-cover border border-white/20"
+                    />
+                    <button
+                      onClick={removeImage}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  <div 
+                    className="w-16 h-16 rounded-lg flex items-center justify-center border border-dashed border-white/20 bg-white/5"
+                    style={{ backgroundColor: editData.color + '20' }}
+                  >
+                    <span className="text-2xl font-bold" style={{ color: editData.color }}>
+                      {editData.name?.substring(0, 1) || '?'}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    onChange={handleImageSelect}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-white/10 hover:bg-white/5 text-white"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {imagePreview ? 'Cambiar' : 'Subir'} Imagen
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">PNG o JPG, máx. 2MB</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => { setEditingService(null); setImagePreview(null); }} 
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleUpdateService} 
+              className="bg-primary text-white"
+              disabled={isUploading}
+            >
+              {isUploading ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={deleteConfirm.open}
