@@ -24,6 +24,8 @@ export interface IStorage {
   // Service operations
   getServices(userId: number): Promise<Service[]>;
   createService(service: InsertService): Promise<Service>;
+  updateService(id: number, updates: Partial<Service>): Promise<Service>;
+  deleteService(id: number): Promise<void>;
 
   // Account operations
   getAccounts(userId: number): Promise<Account[]>;
@@ -34,6 +36,7 @@ export interface IStorage {
 
   // Profile operations
   getProfilesByAccount(accountId: number): Promise<Profile[]>;
+  getProfile(id: number): Promise<Profile | undefined>;
   createProfile(profile: InsertProfile): Promise<Profile>;
   updateProfile(id: number, updates: Partial<Profile>): Promise<Profile>;
   deleteProfile(id: number): Promise<void>;
@@ -84,6 +87,15 @@ export class DatabaseStorage implements IStorage {
     return newService;
   }
 
+  async updateService(id: number, updates: Partial<Service>): Promise<Service> {
+    const [updatedService] = await db.update(services).set(updates).where(eq(services.id, id)).returning();
+    return updatedService;
+  }
+
+  async deleteService(id: number): Promise<void> {
+    await db.delete(services).where(eq(services.id, id));
+  }
+
   async getAccounts(userId: number): Promise<Account[]> {
     return await db.select().from(accounts).where(eq(accounts.userId, userId));
   }
@@ -109,6 +121,11 @@ export class DatabaseStorage implements IStorage {
 
   async getProfilesByAccount(accountId: number): Promise<Profile[]> {
     return await db.select().from(profiles).where(eq(profiles.accountId, accountId));
+  }
+
+  async getProfile(id: number): Promise<Profile | undefined> {
+    const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
+    return profile;
   }
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
