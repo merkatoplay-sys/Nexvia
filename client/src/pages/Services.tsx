@@ -17,14 +17,44 @@ export default function Services() {
   const [newService, setNewService] = useState({ name: '', color: '#7B68EE', maxProfiles: 7 });
   const [editData, setEditData] = useState({ name: '', color: '#7B68EE', maxProfiles: 7, imageUrl: '' });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newImagePreview, setNewImagePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const newFileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAddService = () => {
+  const handleAddService = async () => {
     if (!newService.name) return;
-    if (addService({ name: newService.name, color: newService.color, maxProfiles: newService.maxProfiles, isCustom: true })) {
+    
+    try {
+      setIsUploading(true);
+      const createdService = await addService({ 
+        name: newService.name, 
+        color: newService.color, 
+        maxProfiles: newService.maxProfiles, 
+        isCustom: true 
+      });
+      
+      if (createdService && newImagePreview && newImagePreview.startsWith('data:')) {
+        const response = await fetch(`/api/services/${createdService.id}/image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ imageData: newImagePreview })
+        });
+        
+        if (!response.ok) {
+          toast.error('El servicio se creó pero hubo un error al subir la imagen');
+        }
+      }
+      
+      toast.success('Servicio creado');
       setIsAddOpen(false);
       setNewService({ name: '', color: '#7B68EE', maxProfiles: 7 });
+      setNewImagePreview(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Error al crear servicio');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -97,7 +127,7 @@ export default function Services() {
     }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>, isNew: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -115,16 +145,27 @@ export default function Services() {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setImagePreview(event.target?.result as string);
+      if (isNew) {
+        setNewImagePreview(event.target?.result as string);
+      } else {
+        setImagePreview(event.target?.result as string);
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  const removeImage = () => {
-    setImagePreview(null);
-    setEditData({ ...editData, imageUrl: '' });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const removeImage = (isNew: boolean = false) => {
+    if (isNew) {
+      setNewImagePreview(null);
+      if (newFileInputRef.current) {
+        newFileInputRef.current.value = '';
+      }
+    } else {
+      setImagePreview(null);
+      setEditData({ ...editData, imageUrl: '' });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -218,10 +259,64 @@ export default function Services() {
                   data-testid="input-service-profiles"
                 />
               </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Logo / Imagen (opcional)</label>
+                <div className="flex items-center gap-4">
+                  {newImagePreview ? (
+                    <div className="relative">
+                      <img 
+                        src={newImagePreview} 
+                        alt="Preview" 
+                        className="w-16 h-16 rounded-lg object-cover border border-white/20"
+                      />
+                      <button
+                        onClick={() => removeImage(true)}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
+                        type="button"
+                      >
+                        <X className="h-3 w-3 text-white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div 
+                      className="w-16 h-16 rounded-lg flex items-center justify-center border border-dashed border-white/20 bg-white/5"
+                      style={{ backgroundColor: newService.color + '20' }}
+                    >
+                      <span className="text-2xl font-bold" style={{ color: newService.color }}>
+                        {newService.name?.substring(0, 1) || '?'}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <input
+                      ref={newFileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg"
+                      onChange={(e) => handleImageSelect(e, true)}
+                      className="hidden"
+                      id="new-image-upload"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      type="button"
+                      onClick={() => newFileInputRef.current?.click()}
+                      className="border-white/10 hover:bg-white/5 text-white"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {newImagePreview ? 'Cambiar' : 'Subir'} Imagen
+                    </Button>
+                    <p className="text-xs text-muted-foreground mt-1">PNG o JPG, máx. 2MB</p>
+                  </div>
+                </div>
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleAddService} className="bg-primary text-white" data-testid="button-create-service">Crear Servicio</Button>
+              <Button variant="outline" onClick={() => { setIsAddOpen(false); setNewImagePreview(null); }} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
+              <Button onClick={handleAddService} className="bg-primary text-white" disabled={isUploading} data-testid="button-create-service">
+                {isUploading ? 'Creando...' : 'Crear Servicio'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -371,8 +466,9 @@ export default function Services() {
                       className="w-16 h-16 rounded-lg object-cover border border-white/20"
                     />
                     <button
-                      onClick={removeImage}
+                      onClick={() => removeImage(false)}
                       className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
+                      type="button"
                     >
                       <X className="h-3 w-3 text-white" />
                     </button>

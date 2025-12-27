@@ -111,7 +111,7 @@ interface StreamingContextType {
   updateProfile: (accountId: string, profileId: string, updates: Partial<Profile>) => Promise<boolean>;
   addClient: (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => Promise<string>;
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
-  addService: (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => Promise<boolean>;
+  addService: (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => Promise<Service | null>;
   updateService: (id: string, updates: Partial<Service>) => Promise<boolean>;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
   getAllProfiles: () => Array<Profile & { accountName: string }>;
@@ -365,22 +365,21 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addService = async (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => {
+  const addService = async (service: Omit<Service, 'id' | 'userId' | 'createdAt'>): Promise<Service | null> => {
     if (!service.name || !service.name.trim()) {
       toast.error('El nombre del servicio no puede estar vacío');
-      return false;
+      return null;
     }
     if (services.some(s => s.name === service.name)) {
       toast.error('Este servicio ya existe');
-      return false;
+      return null;
     }
     try {
-      await createServiceMutation.mutateAsync(service);
-      toast.success(`Servicio "${service.name}" creado exitosamente`);
-      return true;
+      const createdService = await createServiceMutation.mutateAsync(service);
+      return createdService;
     } catch (error) {
       toast.error('Error al crear el servicio');
-      return false;
+      return null;
     }
   };
 
