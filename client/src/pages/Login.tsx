@@ -29,7 +29,15 @@ export default function Login() {
       }
       setLocation('/');
     } catch (error: any) {
-      toast.error(error.message || 'Error de autenticación');
+      const errorMessage = error?.message || 'Error de autenticación';
+      toast.error(errorMessage, {
+        duration: 4000,
+        style: {
+          background: '#ef4444',
+          color: 'white',
+          border: 'none',
+        },
+      });
     }
   };
 
