@@ -36,7 +36,7 @@ export async function registerRoutes(
       // Check if user exists
       const existingUser = await getUserByEmail(email);
       if (existingUser) {
-        return res.status(400).json({ message: "Este email ya está registrado" });
+        return res.status(400).json({ message: "Este correo ya pertenece a una cuenta" });
       }
 
       // Create user
@@ -72,13 +72,13 @@ export async function registerRoutes(
       // Find user
       const user = await getUserByEmail(email);
       if (!user) {
-        return res.status(401).json({ message: "Credenciales inválidas" });
+        return res.status(401).json({ message: "No existe una cuenta con este correo" });
       }
 
       // Verify password
       const isValid = await comparePassword(password, user.passwordHash);
       if (!isValid) {
-        return res.status(401).json({ message: "Credenciales inválidas" });
+        return res.status(401).json({ message: "Contraseña incorrecta" });
       }
 
       // Generate token
