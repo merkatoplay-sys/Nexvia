@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Bell, Settings as SettingsIcon, Zap, Send } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -14,31 +14,11 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState(settings);
   const [sendingTest, setSendingTest] = useState(false);
 
-  const handleSaveNotifications = () => {
-    if (localSettings.notifications.enabled && localSettings.notifications.channel === 'telegram') {
-      if (!localSettings.notifications.telegramBotToken || !localSettings.notifications.telegramChatId) {
-        toast.error('Completa el token y chat ID de Telegram');
-        return;
-      }
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings(settings);
     }
-    updateSettings({ notifications: localSettings.notifications });
-    toast.success('Notificaciones configuradas');
-  };
-
-  const handleSendTestTelegram = async () => {
-    if (!localSettings.notifications.telegramBotToken || !localSettings.notifications.telegramChatId) {
-      toast.error('Ingresa el token y chat ID de Telegram primero');
-      return;
-    }
-    setSendingTest(true);
-    await sendTelegramTestNotification(localSettings.notifications.telegramBotToken, localSettings.notifications.telegramChatId);
-    setSendingTest(false);
-  };
-
-  const handleSaveCurrency = () => {
-    updateSettings({ defaultCurrency: localSettings.defaultCurrency });
-    toast.success('Moneda actualizada');
-  };
+  }, [settings]);
 
   const formatTimeDisplay = (time: string): string => {
     if (!time) return '09:00 AM';
@@ -47,6 +27,48 @@ export default function Settings() {
     const ampm = h >= 12 ? 'PM' : 'AM';
     const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
     return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+  };
+
+  if (!localSettings) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <p className="text-muted-foreground">Cargando configuración...</p>
+      </div>
+    );
+  }
+
+  const handleSaveNotifications = () => {
+    if (localSettings.notificationsEnabled && localSettings.notificationChannel === 'telegram') {
+      if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
+        toast.error('Completa el token y chat ID de Telegram');
+        return;
+      }
+    }
+    updateSettings({
+      notificationsEnabled: localSettings.notificationsEnabled,
+      notificationChannel: localSettings.notificationChannel,
+      daysBeforeExpiry: localSettings.daysBeforeExpiry,
+      notificationTime: localSettings.notificationTime,
+      telegramBotToken: localSettings.telegramBotToken,
+      telegramChatId: localSettings.telegramChatId,
+      whatsappPhoneNumber: localSettings.whatsappPhoneNumber,
+    });
+    toast.success('Notificaciones configuradas');
+  };
+
+  const handleSendTestTelegram = async () => {
+    if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
+      toast.error('Ingresa el token y chat ID de Telegram primero');
+      return;
+    }
+    setSendingTest(true);
+    await sendTelegramTestNotification(localSettings.telegramBotToken, localSettings.telegramChatId);
+    setSendingTest(false);
+  };
+
+  const handleSaveCurrency = () => {
+    updateSettings({ defaultCurrency: localSettings.defaultCurrency });
+    toast.success('Moneda actualizada');
   };
 
   return (
@@ -60,7 +82,6 @@ export default function Settings() {
         <p className="text-muted-foreground">Personaliza tu experiencia en la aplicación.</p>
       </div>
 
-      {/* Notificaciones */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -75,32 +96,26 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Recibe alertas sobre vencimientos próximos</p>
               </div>
               <Switch
-                checked={localSettings.notifications.enabled}
+                checked={localSettings.notificationsEnabled}
                 onCheckedChange={checked => 
-                  setLocalSettings({
-                    ...localSettings,
-                    notifications: { ...localSettings.notifications, enabled: checked }
-                  })
+                  setLocalSettings({ ...localSettings, notificationsEnabled: checked })
                 }
+                data-testid="switch-notifications"
               />
             </div>
           </div>
 
-          {localSettings.notifications.enabled && (
+          {localSettings.notificationsEnabled && (
             <>
-              {/* Canal */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Canal de notificación</label>
                 <Select 
-                  value={localSettings.notifications.channel}
+                  value={localSettings.notificationChannel}
                   onValueChange={channel => 
-                    setLocalSettings({
-                      ...localSettings,
-                      notifications: { ...localSettings.notifications, channel: channel as 'whatsapp' | 'telegram' }
-                    })
+                    setLocalSettings({ ...localSettings, notificationChannel: channel as 'whatsapp' | 'telegram' })
                   }
                 >
-                  <SelectTrigger className="glass-input">
+                  <SelectTrigger className="glass-input" data-testid="select-channel">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
@@ -110,19 +125,15 @@ export default function Settings() {
                 </Select>
               </div>
 
-              {/* Días antes */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Avisar con anticipación</label>
                 <Select 
-                  value={localSettings.notifications.daysBeforeExpiry.toString()}
+                  value={localSettings.daysBeforeExpiry.toString()}
                   onValueChange={days => 
-                    setLocalSettings({
-                      ...localSettings,
-                      notifications: { ...localSettings.notifications, daysBeforeExpiry: parseInt(days) as 1 | 2 | 3 }
-                    })
+                    setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })
                   }
                 >
-                  <SelectTrigger className="glass-input">
+                  <SelectTrigger className="glass-input" data-testid="select-days">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
@@ -133,25 +144,21 @@ export default function Settings() {
                 </Select>
               </div>
 
-              {/* Hora */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Hora de notificación</label>
                 <Input
                   type="time"
                   className="glass-input"
-                  value={localSettings.notifications.notificationTime}
+                  value={localSettings.notificationTime}
                   onChange={e => 
-                    setLocalSettings({
-                      ...localSettings,
-                      notifications: { ...localSettings.notifications, notificationTime: e.target.value }
-                    })
+                    setLocalSettings({ ...localSettings, notificationTime: e.target.value })
                   }
+                  data-testid="input-notification-time"
                 />
-                <p className="text-xs text-muted-foreground">Formato: {formatTimeDisplay(localSettings.notifications.notificationTime)}</p>
+                <p className="text-xs text-muted-foreground">Formato: {formatTimeDisplay(localSettings.notificationTime)}</p>
               </div>
 
-              {/* Configuración de Telegram */}
-              {localSettings.notifications.channel === 'telegram' && (
+              {localSettings.notificationChannel === 'telegram' && (
                 <div className="space-y-4 border-t border-white/10 pt-4">
                   <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
                     <p className="text-sm text-blue-200 mb-2"><strong>Configuración de Telegram</strong></p>
@@ -164,13 +171,11 @@ export default function Settings() {
                       type="password"
                       placeholder="123456:ABCDEFGHijklmnopqrstuvwxyz-1234567890"
                       className="glass-input"
-                      value={localSettings.notifications.telegramBotToken || ''}
+                      value={localSettings.telegramBotToken || ''}
                       onChange={e => 
-                        setLocalSettings({
-                          ...localSettings,
-                          notifications: { ...localSettings.notifications, telegramBotToken: e.target.value }
-                        })
+                        setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })
                       }
+                      data-testid="input-telegram-token"
                     />
                   </div>
 
@@ -180,13 +185,11 @@ export default function Settings() {
                       type="text"
                       placeholder="123456789 o -100123456789"
                       className="glass-input"
-                      value={localSettings.notifications.telegramChatId || ''}
+                      value={localSettings.telegramChatId || ''}
                       onChange={e => 
-                        setLocalSettings({
-                          ...localSettings,
-                          notifications: { ...localSettings.notifications, telegramChatId: e.target.value }
-                        })
+                        setLocalSettings({ ...localSettings, telegramChatId: e.target.value })
                       }
+                      data-testid="input-telegram-chatid"
                     />
                     <p className="text-xs text-muted-foreground">Inicia una conversación con tu bot y envía /start para obtener tu Chat ID</p>
                   </div>
@@ -195,6 +198,7 @@ export default function Settings() {
                     onClick={handleSendTestTelegram}
                     disabled={sendingTest}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9 text-sm"
+                    data-testid="button-test-telegram"
                   >
                     <Send className="h-3 w-3 mr-2" />
                     {sendingTest ? 'Enviando...' : 'Enviar Notificación de Prueba'}
@@ -202,8 +206,7 @@ export default function Settings() {
                 </div>
               )}
 
-              {/* Configuración de WhatsApp */}
-              {localSettings.notifications.channel === 'whatsapp' && (
+              {localSettings.notificationChannel === 'whatsapp' && (
                 <div className="space-y-4 border-t border-white/10 pt-4">
                   <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-lg">
                     <p className="text-sm text-green-200 mb-2"><strong>Configuración de WhatsApp</strong></p>
@@ -216,14 +219,12 @@ export default function Settings() {
                       type="tel"
                       placeholder="+34 123 45 67 89"
                       className="glass-input bg-white/5"
-                      value={localSettings.notifications.whatsappPhoneNumber || ''}
+                      value={localSettings.whatsappPhoneNumber || ''}
                       onChange={e => 
-                        setLocalSettings({
-                          ...localSettings,
-                          notifications: { ...localSettings.notifications, whatsappPhoneNumber: e.target.value }
-                        })
+                        setLocalSettings({ ...localSettings, whatsappPhoneNumber: e.target.value })
                       }
                       disabled
+                      data-testid="input-whatsapp"
                     />
                     <p className="text-xs text-muted-foreground">Esta funcionalidad estará disponible próximamente</p>
                   </div>
@@ -232,7 +233,7 @@ export default function Settings() {
 
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg">
                 <p className="text-sm text-primary">
-                  📬 Recibirás notificaciones por <strong>{localSettings.notifications.channel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> {localSettings.notifications.daysBeforeExpiry} día{localSettings.notifications.daysBeforeExpiry > 1 ? 's' : ''} antes de vencimiento, a las <strong>{formatTimeDisplay(localSettings.notifications.notificationTime)}</strong>
+                  📬 Recibirás notificaciones por <strong>{localSettings.notificationChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> {localSettings.daysBeforeExpiry} día{localSettings.daysBeforeExpiry > 1 ? 's' : ''} antes de vencimiento, a las <strong>{formatTimeDisplay(localSettings.notificationTime)}</strong>
                 </p>
               </div>
             </>
@@ -241,13 +242,13 @@ export default function Settings() {
           <Button 
             onClick={handleSaveNotifications}
             className="bg-primary hover:bg-primary/90 text-white w-full"
+            data-testid="button-save-notifications"
           >
             Guardar Configuración de Notificaciones
           </Button>
         </CardContent>
       </Card>
 
-      {/* Preferencias Generales */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -260,13 +261,10 @@ export default function Settings() {
             <Select 
               value={localSettings.defaultCurrency}
               onValueChange={currency => 
-                setLocalSettings({
-                  ...localSettings,
-                  defaultCurrency: currency
-                })
+                setLocalSettings({ ...localSettings, defaultCurrency: currency })
               }
             >
-              <SelectTrigger className="glass-input">
+              <SelectTrigger className="glass-input" data-testid="select-currency">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-popover border-white/10 text-white">
@@ -293,13 +291,13 @@ export default function Settings() {
           <Button 
             onClick={handleSaveCurrency}
             className="bg-primary hover:bg-primary/90 text-white w-full"
+            data-testid="button-save-currency"
           >
             Guardar Preferencias
           </Button>
         </CardContent>
       </Card>
 
-      {/* Información del Sistema */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -310,7 +308,7 @@ export default function Settings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground">Versión</p>
-              <p className="text-sm text-white font-medium">2.0.0</p>
+              <p className="text-sm text-white font-medium" data-testid="text-version">2.0.0</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Última actualización</p>
@@ -318,7 +316,7 @@ export default function Settings() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Estado</p>
-              <p className="text-sm text-emerald-400 font-medium">✅ En línea</p>
+              <p className="text-sm text-emerald-400 font-medium" data-testid="text-status">✅ En línea</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Tema</p>
