@@ -16,6 +16,7 @@ export interface IStorage {
   createService(service: InsertService): Promise<Service>;
   updateService(id: string, userId: string, updates: Partial<Service>): Promise<Service>;
   deleteService(id: string, userId: string): Promise<void>;
+  initializeDefaultServices(userId: string): Promise<void>;
 
   // Accounts
   getAccounts(userId: string): Promise<Account[]>;
@@ -45,11 +46,37 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // Services
   async getServices(userId: string): Promise<Service[]> {
-    return await db
+    const userServices = await db
       .select()
       .from(services)
       .where(eq(services.userId, userId))
       .orderBy(desc(services.createdAt));
+    
+    // Initialize default services for new users
+    if (userServices.length === 0) {
+      await this.initializeDefaultServices(userId);
+      return await db
+        .select()
+        .from(services)
+        .where(eq(services.userId, userId))
+        .orderBy(desc(services.createdAt));
+    }
+    
+    return userServices;
+  }
+
+  async initializeDefaultServices(userId: string): Promise<void> {
+    const defaultServices = [
+      { userId, name: 'Netflix', color: '#E50914', maxProfiles: 5, isCustom: false },
+      { userId, name: 'Spotify', color: '#1DB954', maxProfiles: 7, isCustom: false },
+      { userId, name: 'Disney+', color: '#0072F5', maxProfiles: 7, isCustom: false },
+      { userId, name: 'Prime Video', color: '#146EB4', maxProfiles: 7, isCustom: false },
+      { userId, name: 'HBO', color: '#000000', maxProfiles: 7, isCustom: false },
+      { userId, name: 'Crunchyroll', color: '#F47521', maxProfiles: 7, isCustom: false },
+      { userId, name: 'Vix', color: '#7B68EE', maxProfiles: 7, isCustom: false },
+    ];
+
+    await db.insert(services).values(defaultServices);
   }
 
   async createService(service: InsertService): Promise<Service> {
