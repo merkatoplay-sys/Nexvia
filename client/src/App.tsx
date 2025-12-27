@@ -2,6 +2,7 @@ import { Switch, Route, useLocation } from "wouter";
 import { StreamingProvider } from "@/context/StreamingContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Dashboard from "@/pages/Dashboard";
 import Accounts from "@/pages/Accounts";
@@ -83,6 +84,18 @@ function App() {
       <AuthProvider>
         <StreamingProvider>
           <Toaster />
+          <SonnerToaster 
+            position="top-center" 
+            richColors 
+            theme="dark"
+            toastOptions={{
+              style: {
+                background: '#1a1a2e',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'white',
+              },
+            }}
+          />
           <Router />
         </StreamingProvider>
       </AuthProvider>
