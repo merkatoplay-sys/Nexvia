@@ -13,9 +13,22 @@ import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import AppLayout from "@/components/layout/AppLayout";
 import NotFound from "@/pages/not-found";
+import { Spinner } from "@/components/ui/spinner";
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Spinner className="h-8 w-8" />
+    </div>
+  );
+}
 
 function Router() {
-  const { user } = useStreaming();
+  const { user, isLoading } = useStreaming();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <Switch>
