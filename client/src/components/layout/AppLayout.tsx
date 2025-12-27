@@ -39,7 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="h-full flex flex-col">
           <div className="h-16 flex items-center px-6 border-b border-white/5">
             <MonitorPlay className="h-6 w-6 text-primary mr-2" />
-            <span className="text-xl font-display font-bold tracking-wider text-white">STREAM<span className="text-primary">MGR</span></span>
+            <span className="text-xl font-display font-bold tracking-wider text-white">NEX<span className="text-primary">VIA</span></span>
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-1">
@@ -78,7 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header className="lg:hidden h-16 bg-card/50 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-4 z-30">
           <div className="flex items-center">
             <MonitorPlay className="h-6 w-6 text-primary mr-2" />
-            <span className="font-display font-bold text-white">STREAM<span className="text-primary">MGR</span></span>
+            <span className="font-display font-bold text-white">NEX<span className="text-primary">VIA</span></span>
           </div>
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}

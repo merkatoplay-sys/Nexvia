@@ -37,7 +37,7 @@ export default function Login() {
           </div>
           <div className="space-y-2">
             <CardTitle className="text-3xl font-display font-bold text-white tracking-wide">
-              STREAM<span className="text-primary">MGR</span>
+              NEX<span className="text-primary">VIA</span>
             </CardTitle>
             <CardDescription className="text-muted-foreground text-base">
               Gestión profesional de servicios de streaming

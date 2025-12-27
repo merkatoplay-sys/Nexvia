@@ -518,7 +518,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: chatId,
-          text: '✅ Notificación de prueba desde Streaming Manager\n\nSi ves este mensaje, tu configuración de Telegram es correcta.',
+          text: '✅ Notificación de prueba desde Nexvia\n\nSi ves este mensaje, tu configuración de Telegram es correcta.',
           parse_mode: 'HTML'
         })
       });
