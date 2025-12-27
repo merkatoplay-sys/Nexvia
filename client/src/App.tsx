@@ -49,6 +49,9 @@ function Router() {
     if (!isAuthenticated && location !== "/login") {
       setLocation("/login");
     }
+    if (isAuthenticated && location === "/login") {
+      setLocation("/");
+    }
   }, [isAuthenticated, location, setLocation]);
 
   if (!isAuthenticated) {
@@ -64,6 +67,7 @@ function Router() {
     <AppLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/login">{() => { setLocation("/"); return null; }}</Route>
         <Route path="/accounts" component={Accounts} />
         <Route path="/account/:id" component={AccountDetail} />
         <Route path="/sales" component={Sales} />
@@ -72,7 +76,7 @@ function Router() {
         <Route path="/renovaciones" component={Renovaciones} />
         <Route path="/services" component={Services} />
         <Route path="/settings" component={Settings} />
-        <Route component={NotFound} />
+        <Route component={Dashboard} />
       </Switch>
     </AppLayout>
   );
