@@ -97,6 +97,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteService(id: string, userId: string): Promise<void> {
+    // First get the service to find its name
+    const [service] = await db
+      .select()
+      .from(services)
+      .where(and(eq(services.id, id), eq(services.userId, userId)));
+    
+    if (!service) return;
+
+    // Get all accounts with this service name
+    const serviceAccounts = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.serviceName, service.name), eq(accounts.userId, userId)));
+
+    // Delete each account (which cascades to profiles and expenses)
+    for (const account of serviceAccounts) {
+      await this.deleteAccount(account.id, userId);
+    }
+
+    // Finally delete the service
     await db
       .delete(services)
       .where(and(eq(services.id, id), eq(services.userId, userId)));
