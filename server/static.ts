@@ -6,12 +6,13 @@ import express from "express";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function serveStatic(app: Express) {
-  const publicPath = path.resolve(__dirname, "public");
+// client está en la raíz del proyecto
+const CLIENT_PATH = path.resolve(__dirname, "../client");
 
-  app.use(express.static(publicPath));
+export function serveStatic(app: Express) {
+  app.use(express.static(CLIENT_PATH));
 
   app.get("*", (_req, res) => {
-    res.sendFile(path.join(publicPath, "index.html"));
+    res.sendFile(path.join(CLIENT_PATH, "index.html"));
   });
 }
