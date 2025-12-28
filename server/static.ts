@@ -6,8 +6,8 @@ import express from "express";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// client está en la raíz del proyecto
-const CLIENT_PATH = path.resolve(__dirname, "../client");
+// aquí se sirve el frontend ya construido por Vite
+const CLIENT_PATH = path.resolve(__dirname, "public");
 
 export function serveStatic(app: Express) {
   app.use(express.static(CLIENT_PATH));
