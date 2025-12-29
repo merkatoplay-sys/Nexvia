@@ -265,11 +265,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const createProfileMutation = useMutation({
-    mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-    },
-  });
+  mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/accounts'] }); // ✅ clave
+  },
+});
+
 
   const updateProfileMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Profile> }) =>
@@ -337,6 +339,10 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       }));
 
       await Promise.all(profilesData.map(profile => createProfileMutation.mutateAsync(profile)));
+      // ✅ fuerza refresco final cuando ya se crearon todos
+      await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+
 
       // ✅ NUEVO: registrar GASTO por costo de la cuenta maestra
       const costNumber = Number(newAccount.cost || 0);
