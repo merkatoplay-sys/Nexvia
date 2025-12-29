@@ -1,7 +1,13 @@
-import 'dotenv/config';
+import "dotenv/config";
+import path from "path";
+import { fileURLToPath } from "url";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import * as schema from "@shared/schema";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { Pool } = pg;
 
@@ -17,3 +23,17 @@ export const pool = new Pool({
 });
 
 export const db = drizzle(pool, { schema });
+
+// 👉 MIGRACIONES AUTOMÁTICAS
+(async () => {
+  try {
+    console.log("⏳ Running database migrations...");
+    await migrate(db, {
+      migrationsFolder: path.resolve(__dirname, "../migrations"),
+    });
+    console.log("✅ Database migrations completed");
+  } catch (err) {
+    console.error("❌ Migration error:", err);
+  }
+})();
+
