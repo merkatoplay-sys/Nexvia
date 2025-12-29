@@ -24,16 +24,4 @@ export const pool = new Pool({
 
 export const db = drizzle(pool, { schema });
 
-// 👉 MIGRACIONES AUTOMÁTICAS
-(async () => {
-  try {
-    console.log("⏳ Running database migrations...");
-    await migrate(db, {
-      migrationsFolder: path.resolve(__dirname, "../migrations"),
-    });
-    console.log("✅ Database migrations completed");
-  } catch (err) {
-    console.error("❌ Migration error:", err);
-  }
-})();
 
