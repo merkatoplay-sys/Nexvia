@@ -14,10 +14,9 @@ import { motion } from 'framer-motion';
 export default function Accounts() {
   const { accounts, addAccount, clients, updateProfile, deleteAccount, getMaxProfilesByService, services } = useStreaming();
 
-  // ✅ Evita crashes si aún no cargó
-  const accountsSafe = accounts ?? [];
-  const servicesSafe = services ?? [];
-  const clientsSafe = clients ?? [];
+  const accountsSafe = Array.isArray(accounts) ? accounts : [];
+  const servicesSafe = Array.isArray(services) ? services : [];
+  const clientsSafe = Array.isArray(clients) ? clients : [];
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
@@ -25,6 +24,7 @@ export default function Accounts() {
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: any } | null>(null);
   const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string; email: string }>({ open: false, id: '', name: '', email: '' });
+
   const [newAccount, setNewAccount] = useState<Partial<Account>>({
     serviceName: 'Netflix',
     totalProfiles: 5,
@@ -40,26 +40,20 @@ export default function Accounts() {
     return matchesSearch && matchesService;
   });
 
-  const handleAddAccount = () => {
+  // ✅ IMPORTANTE: async + await
+  const handleAddAccount = async () => {
     if (!newAccount.email || !newAccount.cost) return;
 
-    const profiles = Array.from({ length: newAccount.totalProfiles || 5 }, () => ({
-      id: Math.random().toString(36).substr(2, 9),
-      name: `Disponible`,
-      status: 'disponible' as const
-    }));
-
-    const success = addAccount({
+    const success = await addAccount({
       serviceName: (newAccount.serviceName as ServiceType) || 'Netflix',
       email: newAccount.email || '',
       password: newAccount.password || '',
       totalProfiles: newAccount.totalProfiles || 5,
-      profiles,
       startDate: new Date().toISOString(),
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      isRenewable: newAccount.isRenewable || true,
+      isRenewable: newAccount.isRenewable ?? true,
       cost: Number(newAccount.cost) || 0,
-      pricePerProfile: Number(newAccount.pricePerProfile) || 0
+      pricePerProfile: Number(newAccount.pricePerProfile) || 0,
     });
 
     if (success) {
@@ -80,6 +74,20 @@ export default function Accounts() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    if (!editingProfile) return;
+
+    await updateProfile(editingProfile.accountId, editingProfile.profile.id, {
+      name: editData.name,
+      pin: editData.pin || undefined,
+      clientId: editData.clientId || undefined,
+      phone: editData.phone || undefined,
+      price: editData.price || undefined
+    });
+
+    setEditingProfile(null);
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -90,10 +98,11 @@ export default function Accounts() {
 
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]" data-testid="button-add-account">
+            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
               <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
             </Button>
           </DialogTrigger>
+
           <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
             <DialogHeader>
               <DialogTitle>Registrar Nueva Cuenta</DialogTitle>
@@ -105,9 +114,9 @@ export default function Accounts() {
                   <label className="text-xs text-muted-foreground">Servicio</label>
                   <Select
                     onValueChange={(val) => setNewAccount({ ...newAccount, serviceName: val as ServiceType })}
-                    defaultValue="Netflix"
+                    value={(newAccount.serviceName as string) || 'Netflix'}
                   >
-                    <SelectTrigger className="glass-input" data-testid="select-service">
+                    <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
@@ -125,10 +134,9 @@ export default function Accounts() {
                   <Input
                     type="number"
                     className="glass-input"
-                    value={newAccount.totalProfiles}
-                    onChange={e => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value) })}
+                    value={newAccount.totalProfiles ?? 5}
+                    onChange={e => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value || '0') })}
                     max={getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')}
-                    data-testid="input-profiles"
                   />
                 </div>
               </div>
@@ -137,10 +145,8 @@ export default function Accounts() {
                 <label className="text-xs text-muted-foreground">Email de la cuenta</label>
                 <Input
                   className="glass-input"
-                  placeholder="ejemplo@correo.com"
                   value={newAccount.email || ''}
                   onChange={e => setNewAccount({ ...newAccount, email: e.target.value })}
-                  data-testid="input-account-email"
                 />
               </div>
 
@@ -149,10 +155,8 @@ export default function Accounts() {
                 <Input
                   className="glass-input"
                   type="password"
-                  placeholder="••••••••"
                   value={newAccount.password || ''}
                   onChange={e => setNewAccount({ ...newAccount, password: e.target.value })}
-                  data-testid="input-account-password"
                 />
               </div>
 
@@ -162,9 +166,8 @@ export default function Accounts() {
                   <Input
                     type="number"
                     className="glass-input"
-                    value={newAccount.cost || ''}
+                    value={newAccount.cost ?? ''}
                     onChange={e => setNewAccount({ ...newAccount, cost: parseFloat(e.target.value) })}
-                    data-testid="input-account-cost"
                   />
                 </div>
                 <div className="space-y-2">
@@ -172,9 +175,8 @@ export default function Accounts() {
                   <Input
                     type="number"
                     className="glass-input"
-                    value={newAccount.pricePerProfile || ''}
+                    value={newAccount.pricePerProfile ?? ''}
                     onChange={e => setNewAccount({ ...newAccount, pricePerProfile: parseFloat(e.target.value) })}
-                    data-testid="input-price-per-profile"
                   />
                 </div>
               </div>
@@ -182,7 +184,7 @@ export default function Accounts() {
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleAddAccount} className="bg-primary text-white" data-testid="button-save-account">Guardar Cuenta</Button>
+              <Button onClick={handleAddAccount} className="bg-primary text-white">Guardar Cuenta</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -196,12 +198,11 @@ export default function Accounts() {
             placeholder="Buscar por email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            data-testid="input-search"
           />
         </div>
 
         <Select value={filterService} onValueChange={setFilterService}>
-          <SelectTrigger className="w-[180px] glass-input bg-background/20" data-testid="select-filter">
+          <SelectTrigger className="w-[180px] glass-input bg-background/20">
             <SelectValue placeholder="Filtrar Servicio" />
           </SelectTrigger>
           <SelectContent className="bg-popover border-white/10 text-white">
@@ -221,9 +222,6 @@ export default function Accounts() {
             <p className="text-muted-foreground text-center mb-6">
               Registra tu primera cuenta de streaming para comenzar a distribuir perfiles.
             </p>
-            <Button onClick={() => setIsAddOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
-              <Plus className="mr-2 h-4 w-4" /> Agregar Cuenta
-            </Button>
           </CardContent>
         </Card>
       ) : filteredAccounts.length === 0 ? (
@@ -231,31 +229,22 @@ export default function Accounts() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Search className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">Sin resultados</h3>
-            <p className="text-muted-foreground text-center">
-              No se encontraron cuentas que coincidan con tu búsqueda.
-            </p>
+            <p className="text-muted-foreground text-center">No se encontraron cuentas que coincidan con tu búsqueda.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {filteredAccounts.map((account) => {
             const daysLeft = differenceInDays(new Date(account.expirationDate), new Date());
+            const profiles = Array.isArray(account.profiles) ? account.profiles : [];
 
             return (
-              <motion.div
-                key={account.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Card className="glass-card overflow-hidden group hover:border-primary/30 transition-all duration-300" data-testid={`card-account-${account.id}`}>
+              <motion.div key={account.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
+                <Card className="glass-card overflow-hidden">
                   <CardHeader className="bg-white/5 border-b border-white/5 pb-3">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg
-                          ${account.serviceName === 'Netflix' ? 'bg-red-600' :
-                            account.serviceName === 'Spotify' ? 'bg-green-500' :
-                            account.serviceName === 'Disney+' ? 'bg-blue-600' : 'bg-primary'}`}>
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg bg-primary">
                           {account.serviceName.substring(0, 1)}
                         </div>
                         <div>
@@ -264,7 +253,7 @@ export default function Accounts() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={daysLeft < 3 ? "destructive" : "default"} className={`${daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}`}>
+                        <Badge variant={daysLeft < 3 ? "destructive" : "default"} className={`${daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>
                           {daysLeft} días
                         </Badge>
                         <Button
@@ -272,7 +261,6 @@ export default function Accounts() {
                           variant="ghost"
                           onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.serviceName, email: account.email })}
                           className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-xs"
-                          data-testid={`button-delete-account-${account.id}`}
                         >
                           Eliminar
                         </Button>
@@ -295,11 +283,10 @@ export default function Accounts() {
                     <div className="space-y-2">
                       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Perfiles</h4>
 
-                      {/* ✅ FIX: si profiles viene undefined, no revienta */}
-                      {(account.profiles ?? []).map((profile: any) => (
+                      {profiles.map((profile: any) => (
                         <div
                           key={profile.id}
-                          className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm group/profile cursor-pointer"
+                          className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm cursor-pointer"
                           onClick={() => {
                             if (profile.status === 'activo') {
                               setEditingProfile({ accountId: account.id, profile });
@@ -368,21 +355,7 @@ export default function Accounts() {
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button
-                onClick={() => {
-                  updateProfile(editingProfile.accountId, editingProfile.profile.id, {
-                    name: editData.name,
-                    pin: editData.pin || undefined,
-                    clientId: editData.clientId || undefined,
-                    phone: editData.phone || undefined,
-                    price: editData.price || undefined
-                  });
-                  setEditingProfile(null);
-                }}
-                className="bg-primary text-white"
-              >
-                Guardar
-              </Button>
+              <Button onClick={handleSaveProfile} className="bg-primary text-white">Guardar</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

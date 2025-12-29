@@ -1,20 +1,18 @@
-import { useStreaming, ServiceType } from '@/context/StreamingContext';
+import { useStreaming } from '@/context/StreamingContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Plus, ShoppingCart, CheckCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { format, addDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Sales() {
-  const { accounts, clients, sellProfile } = useStreaming();
+  const { accounts, sellProfile } = useStreaming();
 
-  // ✅ SAFE: evita crashes cuando vienen undefined
-  const accountsSafe = accounts ?? [];
-  const clientsSafe = clients ?? [];
+  const accountsSafe = Array.isArray(accounts) ? accounts : [];
 
   const [selectedService, setSelectedService] = useState<string>('');
   const [isSellDialogOpen, setIsSellDialogOpen] = useState(false);
@@ -30,22 +28,41 @@ export default function Sales() {
     endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
   });
 
-  const filteredAccounts = selectedService
-    ? accountsSafe.filter(acc => acc.serviceName === selectedService)
-    : accountsSafe;
+  const uniqueServices = useMemo(() => {
+    return Array.from(new Set(accountsSafe.map(a => a.serviceName).filter(s => s && s.trim())));
+  }, [accountsSafe]);
 
-  const selectedAccount = accountsSafe.find(acc => acc.id === selectedAccountId);
+  const filteredAccounts = useMemo(() => {
+    return selectedService ? accountsSafe.filter(acc => acc.serviceName === selectedService) : accountsSafe;
+  }, [accountsSafe, selectedService]);
 
-  // ✅ SAFE: profiles puede venir undefined desde API
-  const selectedAccountProfiles = (selectedAccount?.profiles ?? []);
-  const availableProfiles = selectedAccountProfiles.filter((p: any) => p.status === 'disponible');
+  const selectedAccount = useMemo(() => {
+    return accountsSafe.find(acc => acc.id === selectedAccountId);
+  }, [accountsSafe, selectedAccountId]);
 
-  const handleSellProfile = () => {
+  const selectedAccountProfiles = Array.isArray(selectedAccount?.profiles) ? selectedAccount!.profiles : [];
+  const availableProfiles = selectedAccountProfiles.filter((p: any) => p?.status === 'disponible');
+
+  const resetForm = () => {
+    setSaleData({
+      name: '',
+      phone: '',
+      pin: '',
+      price: 0,
+      startDate: format(new Date(), 'yyyy-MM-dd'),
+      endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+    });
+    setSelectedAccountId('');
+    setSelectedProfileId('');
+    setSelectedService('');
+  };
+
+  const handleSellProfile = async () => {
     if (
       !selectedAccountId ||
       !selectedProfileId ||
-      !saleData.name ||
-      !saleData.phone ||
+      !saleData.name.trim() ||
+      !saleData.phone.trim() ||
       !saleData.price ||
       !saleData.endDate ||
       !saleData.startDate
@@ -53,35 +70,21 @@ export default function Sales() {
       return;
     }
 
-    const success = sellProfile(selectedAccountId, selectedProfileId, {
-      name: saleData.name,
-      phone: saleData.phone,
-      pin: saleData.pin,
+    // ✅ IMPORTANTE: await
+    const success = await sellProfile(selectedAccountId, selectedProfileId, {
+      name: saleData.name.trim(),
+      phone: saleData.phone.trim(),
+      pin: saleData.pin?.trim() || undefined,
       price: Number(saleData.price),
-      startDate: saleData.startDate + 'T00:00:00Z',
-      endDate: saleData.endDate + 'T00:00:00Z',
+      startDate: saleData.startDate + 'T00:00:00',
+      endDate: saleData.endDate + 'T00:00:00',
     });
 
     if (success) {
       setIsSellDialogOpen(false);
-      setSaleData({
-        name: '',
-        phone: '',
-        pin: '',
-        price: 0,
-        startDate: format(new Date(), 'yyyy-MM-dd'),
-        endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-      });
-      setSelectedAccountId('');
-      setSelectedProfileId('');
-      setSelectedService('');
+      resetForm();
     }
   };
-
-  // ✅ servicios únicos (sin undefined)
-  const uniqueServices = Array.from(
-    new Set(accountsSafe.map(a => a.serviceName).filter(s => s && s.trim()))
-  );
 
   return (
     <div className="space-y-8">
@@ -91,7 +94,13 @@ export default function Sales() {
           <p className="text-muted-foreground">Vende perfiles disponibles a tus clientes.</p>
         </div>
 
-        <Dialog open={isSellDialogOpen} onOpenChange={setIsSellDialogOpen}>
+        <Dialog
+          open={isSellDialogOpen}
+          onOpenChange={(open) => {
+            setIsSellDialogOpen(open);
+            if (!open) resetForm();
+          }}
+        >
           <DialogTrigger asChild>
             <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
               <Plus className="mr-2 h-4 w-4" /> Nueva Venta
@@ -104,35 +113,44 @@ export default function Sales() {
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
-              {/* Seleccionar Servicio */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Servicio</label>
-                <Select onValueChange={setSelectedService} value={selectedService}>
+                <Select
+                  onValueChange={(val) => {
+                    setSelectedService(val);
+                    setSelectedAccountId('');
+                    setSelectedProfileId('');
+                  }}
+                  value={selectedService}
+                >
                   <SelectTrigger className="glass-input">
                     <SelectValue placeholder="Selecciona un servicio" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
                     {uniqueServices.map(service => (
-                      <SelectItem key={service} value={service}>
-                        {service}
-                      </SelectItem>
+                      <SelectItem key={service} value={service}>{service}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Seleccionar Cuenta */}
               {selectedService && (
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Cuenta Maestra</label>
-                  <Select onValueChange={setSelectedAccountId} value={selectedAccountId}>
+                  <Select
+                    onValueChange={(val) => {
+                      setSelectedAccountId(val);
+                      setSelectedProfileId('');
+                    }}
+                    value={selectedAccountId}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Selecciona una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {filteredAccounts.map(acc => {
-                        const profiles = (acc.profiles ?? []);
-                        const availCount = profiles.filter((p: any) => p.status === 'disponible').length;
+                        const profs = Array.isArray(acc.profiles) ? acc.profiles : [];
+                        const availCount = profs.filter((p: any) => p?.status === 'disponible').length;
                         return (
                           <SelectItem key={acc.id} value={acc.id} disabled={availCount === 0}>
                             {acc.email} ({availCount} disponibles)
@@ -144,7 +162,6 @@ export default function Sales() {
                 </div>
               )}
 
-              {/* Seleccionar Perfil */}
               {selectedAccountId && (
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Perfil Disponible</label>
@@ -163,89 +180,46 @@ export default function Sales() {
                 </div>
               )}
 
-              {/* Datos del Cliente */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Nombre del Cliente</label>
-                <Input
-                  className="glass-input"
-                  placeholder="Juan Pérez"
-                  value={saleData.name}
-                  onChange={e => setSaleData({ ...saleData, name: e.target.value })}
-                />
+                <Input className="glass-input" value={saleData.name} onChange={e => setSaleData({ ...saleData, name: e.target.value })} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Teléfono del Cliente</label>
-                <Input
-                  className="glass-input"
-                  placeholder="+502 5555 5555"
-                  value={saleData.phone}
-                  onChange={e => setSaleData({ ...saleData, phone: e.target.value })}
-                />
+                <Input className="glass-input" value={saleData.phone} onChange={e => setSaleData({ ...saleData, phone: e.target.value })} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">PIN (opcional)</label>
-                <Input
-                  className="glass-input"
-                  placeholder="1234"
-                  value={saleData.pin}
-                  onChange={e => setSaleData({ ...saleData, pin: e.target.value })}
-                />
+                <Input className="glass-input" value={saleData.pin} onChange={e => setSaleData({ ...saleData, pin: e.target.value })} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Precio ($)</label>
-                <Input
-                  type="number"
-                  className="glass-input"
-                  value={saleData.price}
-                  onChange={e => setSaleData({ ...saleData, price: parseFloat(e.target.value) })}
-                />
+                <Input type="number" className="glass-input" value={saleData.price} onChange={e => setSaleData({ ...saleData, price: parseFloat(e.target.value) })} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Fecha de Inicio</label>
-                  <Input
-                    type="date"
-                    className="glass-input"
-                    value={saleData.startDate}
-                    onChange={e => setSaleData({ ...saleData, startDate: e.target.value })}
-                  />
+                  <Input type="date" className="glass-input" value={saleData.startDate} onChange={e => setSaleData({ ...saleData, startDate: e.target.value })} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Fecha de Vencimiento</label>
-                  <Input
-                    type="date"
-                    className="glass-input"
-                    value={saleData.endDate}
-                    onChange={e => setSaleData({ ...saleData, endDate: e.target.value })}
-                  />
+                  <Input type="date" className="glass-input" value={saleData.endDate} onChange={e => setSaleData({ ...saleData, endDate: e.target.value })} />
                 </div>
               </div>
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsSellDialogOpen(false)}
-                className="border-white/10 hover:bg-white/5 text-white"
-              >
+              <Button variant="outline" onClick={() => setIsSellDialogOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
                 Cancelar
               </Button>
               <Button
                 onClick={handleSellProfile}
                 className="bg-primary text-white"
-                disabled={
-                  !selectedAccountId ||
-                  !selectedProfileId ||
-                  !saleData.name ||
-                  !saleData.phone ||
-                  !saleData.price ||
-                  !saleData.endDate ||
-                  !saleData.startDate
-                }
+                disabled={!selectedAccountId || !selectedProfileId || !saleData.name || !saleData.phone || !saleData.price}
               >
                 Confirmar Venta
               </Button>
@@ -254,7 +228,6 @@ export default function Sales() {
         </Dialog>
       </div>
 
-      {/* Filtro por Servicio */}
       <div className="flex gap-4 items-center bg-card/40 p-4 rounded-lg border border-white/5 backdrop-blur-sm flex-wrap">
         <Button
           variant={selectedService === '' ? 'default' : 'outline'}
@@ -276,20 +249,14 @@ export default function Sales() {
         ))}
       </div>
 
-      {/* Grid de Cuentas con Perfiles Disponibles */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredAccounts.map((account: any) => {
-          const profiles = (account.profiles ?? []);
-          const activeProfiles = profiles.filter((p: any) => p.status === 'activo').length;
-          const availableCount = profiles.filter((p: any) => p.status === 'disponible').length;
+          const profiles = Array.isArray(account.profiles) ? account.profiles : [];
+          const activeProfiles = profiles.filter((p: any) => p?.status === 'activo').length;
+          const availableCount = profiles.filter((p: any) => p?.status === 'disponible').length;
 
           return (
-            <motion.div
-              key={account.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2 }}
-            >
+            <motion.div key={account.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
               <Card className="glass-card overflow-hidden">
                 <CardHeader className="bg-white/5 border-b border-white/5 pb-3">
                   <div className="flex justify-between items-start gap-3">
@@ -331,11 +298,7 @@ export default function Sales() {
                             <p className="text-xs text-muted-foreground">{profile.phone}</p>
                           )}
                         </div>
-                        {profile.status === 'activo' ? (
-                          <CheckCircle className="h-4 w-4 text-emerald-400" />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Disponible</span>
-                        )}
+                        {profile.status === 'activo' ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <span className="text-xs text-muted-foreground">Disponible</span>}
                       </div>
                     ))}
                   </div>
@@ -344,7 +307,9 @@ export default function Sales() {
                     <Button
                       className="w-full bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
                       onClick={() => {
+                        setSelectedService(account.serviceName);
                         setSelectedAccountId(account.id);
+                        setSelectedProfileId('');
                         setIsSellDialogOpen(true);
                       }}
                     >

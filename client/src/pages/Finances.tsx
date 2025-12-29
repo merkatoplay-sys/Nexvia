@@ -6,38 +6,24 @@ import { motion } from 'framer-motion';
 
 export default function Finances() {
   const { expenses, getStats } = useStreaming();
+
+  const expensesSafe = Array.isArray(expenses) ? expenses : [];
   const stats = getStats();
 
-  const ganancias = expenses.filter(e => e.type === 'ganancia').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const gastos = expenses.filter(e => e.type === 'gasto').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const ajustes = expenses.filter(e => e.type === 'ajuste').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const ganancias = expensesSafe.filter(e => e.type === 'ganancia').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const gastos = expensesSafe.filter(e => e.type === 'gasto').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const ajustes = expensesSafe.filter(e => e.type === 'ajuste').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
-    }
-  };
-
-  const item = {
-    hidden: { y: 20, opacity: 0 },
-    show: { y: 0, opacity: 1 }
-  };
+  const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } };
+  const item = { hidden: { y: 20, opacity: 0 }, show: { y: 0, opacity: 1 } };
 
   return (
-    <motion.div 
-      variants={container}
-      initial="hidden"
-      animate="show"
-      className="space-y-8"
-    >
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
       <div>
         <h1 className="text-3xl font-display font-bold text-white mb-2">Finanzas</h1>
         <p className="text-muted-foreground">Historial completo de movimientos contables: ganancias, gastos y ajustes.</p>
       </div>
 
-      {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-3">
         <motion.div variants={item}>
           <Card className="glass-card">
@@ -83,7 +69,6 @@ export default function Finances() {
         </motion.div>
       </div>
 
-      {/* Información de renovaciones */}
       <Card className="glass-card border-blue-500/20 bg-blue-500/5">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -91,8 +76,9 @@ export default function Finances() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground mb-3">Para registrar renovaciones, devoluciones y ajustes, ve a la sección <strong className="text-primary">Renovaciones y Ajustes</strong>.</p>
-          <p className="text-xs text-muted-foreground">Desde ahí puedes:</p>
+          <p className="text-sm text-muted-foreground mb-3">
+            Para registrar renovaciones, devoluciones y ajustes, ve a la sección <strong className="text-primary">Renovaciones y Ajustes</strong>.
+          </p>
           <ul className="text-xs text-muted-foreground mt-2 space-y-1 ml-3 list-disc">
             <li>Renovar cuentas maestras (se registran como GASTOS)</li>
             <li>Renovar perfiles vendidos (se registran como GANANCIAS)</li>
@@ -101,7 +87,6 @@ export default function Finances() {
         </CardContent>
       </Card>
 
-      {/* Historial de Ganancias y Gastos */}
       <div className="grid gap-6 md:grid-cols-3">
         <motion.div variants={item}>
           <Card className="glass-card">
