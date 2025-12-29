@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, boolean, real, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -7,7 +7,7 @@ import { z } from "zod";
 // Export auth models (REQUIRED for Replit Auth)
 export * from "./models/auth";
 
-// Services table (Netflix, Spotify, etc.)
+// Services table
 export const services = pgTable("services", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -31,12 +31,21 @@ export const accounts = pgTable("accounts", {
   expirationDate: timestamp("expiration_date").notNull(),
   isRenewable: boolean("is_renewable").notNull().default(true),
   cost: real("cost").notNull(),
+
+  // ⚠️ lo dejamos por compatibilidad (puedes no usarlo en UI)
   pricePerProfile: real("price_per_profile").notNull().default(0),
+
   status: varchar("status", { length: 20 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+
+  // ✅ NUEVO: venta cuenta completa
+  saleType: varchar("sale_type", { length: 20 }).notNull().default("perfiles"), // "perfiles" | "cuenta"
+  soldClientId: varchar("sold_client_id"),
+  soldStartDate: timestamp("sold_start_date"),
+  soldEndDate: timestamp("sold_end_date"),
 });
 
-// Profiles table (perfiles dentro de cuentas)
+// Profiles table
 export const profiles = pgTable("profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -62,7 +71,7 @@ export const clients = pgTable("clients", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Expenses table (gastos y ganancias)
+// Expenses table
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
@@ -77,7 +86,7 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Settings table (configuración por usuario)
+// Settings table
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
@@ -94,13 +103,6 @@ export const settings = pgTable("settings", {
 });
 
 // Relations
-export const servicesRelations = relations(services, ({ one }) => ({
-  user: one(services, {
-    fields: [services.userId],
-    references: [services.id],
-  }),
-}));
-
 export const accountsRelations = relations(accounts, ({ many }) => ({
   profiles: many(profiles),
 }));

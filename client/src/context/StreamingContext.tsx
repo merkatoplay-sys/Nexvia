@@ -43,11 +43,21 @@ export interface Account {
   expirationDate: string;
   isRenewable: boolean;
   cost: number;
+
+  // lo dejamos por compatibilidad pero no lo uses en UI
   pricePerProfile: number;
+
   status: 'activa' | 'por vencer' | 'vencida';
   createdAt?: Date;
-  // Nota: en backend puede venir sin profiles, por eso el frontend usa (account.profiles ?? [])
+
+  // backend puede venir sin profiles
   profiles?: Profile[];
+
+  // ✅ NUEVO: venta cuenta completa
+  saleType?: 'perfiles' | 'cuenta';
+  soldClientId?: string | null;
+  soldStartDate?: string | null;
+  soldEndDate?: string | null;
 }
 
 export interface Client {
@@ -103,6 +113,12 @@ interface StreamingContextType {
     accountId: string,
     profileId: string,
     clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
+  ) => Promise<boolean>;
+
+  // ✅ NUEVO: vender cuenta completa
+  sellAccount: (
+    accountId: string,
+    data: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
   ) => Promise<boolean>;
 
   renewProfile: (accountId: string, profileId: string, renewalPrice: number) => Promise<boolean>;
@@ -265,13 +281,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const createProfileMutation = useMutation({
-  mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/accounts'] }); // ✅ clave
-  },
-});
-
+    mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
+  });
 
   const updateProfileMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Profile> }) =>
@@ -312,7 +327,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     },
   });
 
-  // ✅ CAMBIO: ahora registra GASTO por costo al crear cuenta
+  // ✅ Crear cuenta: NO registra gasto aquí (ya lo hace el backend)
   const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
     const service = services.find(s => s.name === newAccount.serviceName);
     const maxProfiles = service?.maxProfiles || 7;
@@ -324,14 +339,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
     const accountToCreate = {
       ...newAccount,
-      pricePerProfile: Number(newAccount.pricePerProfile ?? 0), // lo mantenemos en 0
+      pricePerProfile: 0,
       status: 'activa' as const,
     };
 
     try {
       const createdAccount = await createAccountMutation.mutateAsync(accountToCreate);
 
-      // Crear perfiles "Disponible"
       const profilesData = Array.from({ length: newAccount.totalProfiles }, () => ({
         accountId: createdAccount.id,
         name: 'Disponible',
@@ -339,22 +353,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       }));
 
       await Promise.all(profilesData.map(profile => createProfileMutation.mutateAsync(profile)));
-      // ✅ fuerza refresco final cuando ya se crearon todos
+
+      // fuerza refresco final
       await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-
-
-      // ✅ NUEVO: registrar GASTO por costo de la cuenta maestra
-      const costNumber = Number(newAccount.cost || 0);
-      if (costNumber > 0) {
-        await createExpenseMutation.mutateAsync({
-          description: `Compra cuenta ${newAccount.serviceName} (${newAccount.email})`,
-          amount: costNumber,
-          type: 'gasto',
-          accountId: createdAccount.id,
-          date: new Date().toISOString(),
-        });
-      }
+      await queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
 
       toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
       return true;
@@ -472,6 +475,30 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return true;
     } catch (error) {
       toast.error('Error al vender el perfil');
+      return false;
+    }
+  };
+
+  // ✅ NUEVO: vender cuenta completa
+  const sellAccount = async (
+    accountId: string,
+    data: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
+  ) => {
+    try {
+      await fetchAPI(`/api/accounts/${accountId}/sell`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+
+      toast.success('Cuenta completa vendida exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al vender cuenta completa');
       return false;
     }
   };
@@ -782,6 +809,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         updateAccount,
         deleteAccount,
         sellProfile,
+        sellAccount, // ✅
         renewProfile,
         renewAccount,
         updateProfile,

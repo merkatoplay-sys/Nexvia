@@ -16,11 +16,18 @@ import { insertUserSchema, loginSchema } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
+function toDate(val: any): Date | undefined {
+  if (val === null || val === undefined || val === "") return undefined;
+  if (val instanceof Date) return val;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Add cookie parser middleware
   app.use(cookieParser());
 
   // Auth routes
@@ -35,22 +42,19 @@ export async function registerRoutes(
 
       const { email, password, firstName, lastName } = result.data;
 
-      // Check if user exists
       const existingUser = await getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ message: "Este correo ya pertenece a una cuenta" });
       }
 
-      // Create user
       const user = await createUser(email, password, firstName ?? undefined, lastName ?? undefined);
       const token = generateToken(user.id, user.email);
 
-      // Set cookie
       res.cookie("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       res.json({ user: toSafeUser(user), token });
@@ -71,27 +75,23 @@ export async function registerRoutes(
 
       const { email, password } = result.data;
 
-      // Find user
       const user = await getUserByEmail(email);
       if (!user) {
         return res.status(401).json({ message: "No existe una cuenta con este correo" });
       }
 
-      // Verify password
       const isValid = await comparePassword(password, user.passwordHash);
       if (!isValid) {
         return res.status(401).json({ message: "Contraseña incorrecta" });
       }
 
-      // Generate token
       const token = generateToken(user.id, user.email);
 
-      // Set cookie
       res.cookie("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       res.json({ user: toSafeUser(user), token });
@@ -199,10 +199,9 @@ export async function registerRoutes(
     }
   });
 
-  // Serve uploaded files
   app.use("/uploads", (await import("express")).default.static(path.join(process.cwd(), "uploads")));
 
-  // Accounts routes ✅ (AHORA incluye profiles)
+  // Accounts routes (incluye profiles)
   app.get("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -231,10 +230,37 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ Crear cuenta: convierte fechas y registra GASTO por cost
   app.post("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const account = await storage.createAccount({ ...req.body, userId });
+
+      const startDate = toDate(req.body?.startDate) ?? new Date();
+      const expirationDate = toDate(req.body?.expirationDate) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      const account = await storage.createAccount({
+        ...req.body,
+        userId,
+        startDate,
+        expirationDate,
+      });
+
+      // ✅ Registrar el costo como GASTO
+      const cost = Number(req.body?.cost ?? 0);
+      if (cost > 0) {
+        await storage.createExpense({
+          userId,
+          description: `Compra cuenta ${account.serviceName} (${account.email})`,
+          amount: cost,
+          type: "gasto",
+          accountId: account.id,
+          profileId: null,
+          date: new Date(),
+          note: null,
+          reference: "COMPRA_CUENTA",
+        } as any);
+      }
+
       res.json(account);
     } catch (error) {
       console.error("Error creating account:", error);
@@ -242,14 +268,99 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ Update cuenta: convierte fechas si vienen
   app.patch("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const account = await storage.updateAccount(req.params.id, userId, req.body);
+
+      const updates: any = { ...req.body };
+      if ("startDate" in updates) updates.startDate = toDate(updates.startDate);
+      if ("expirationDate" in updates) updates.expirationDate = toDate(updates.expirationDate);
+      if ("soldStartDate" in updates) updates.soldStartDate = toDate(updates.soldStartDate);
+      if ("soldEndDate" in updates) updates.soldEndDate = toDate(updates.soldEndDate);
+
+      const account = await storage.updateAccount(req.params.id, userId, updates);
       res.json(account);
     } catch (error) {
       console.error("Error updating account:", error);
       res.status(500).json({ message: "Failed to update account" });
+    }
+  });
+
+  // ✅ NUEVO: vender CUENTA COMPLETA
+  app.post("/api/accounts/:id/sell", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const accountId = req.params.id;
+
+      const { name, phone, pin, price, startDate, endDate } = req.body ?? {};
+
+      if (!name || !phone || !price || !startDate || !endDate) {
+        return res.status(400).json({ message: "Datos incompletos para vender cuenta" });
+      }
+
+      const start = toDate(startDate);
+      const end = toDate(endDate);
+
+      if (!start || !end) {
+        return res.status(400).json({ message: "Fechas inválidas" });
+      }
+
+      // Cuenta existe
+      const accountsList = await storage.getAccounts(userId);
+      const account = accountsList.find(a => a.id === accountId);
+      if (!account) return res.status(404).json({ message: "Cuenta no encontrada" });
+
+      // Cliente por teléfono
+      const allClients = await storage.getClients(userId);
+      let client = allClients.find(c => c.phone === phone);
+
+      if (!client) {
+        client = await storage.createClient({ userId, name, phone, notes: null });
+      }
+
+      // Marcar cuenta como vendida
+      await storage.updateAccount(accountId, userId, {
+        saleType: "cuenta",
+        soldClientId: client.id,
+        soldStartDate: start,
+        soldEndDate: end,
+      } as any);
+
+      // Bloquear perfiles: todos quedan "activo" con el mismo cliente
+      const allProfiles = await storage.getProfiles(userId);
+      const accountProfiles = allProfiles.filter(p => p.accountId === accountId);
+
+      for (const p of accountProfiles) {
+        await storage.updateProfile(p.id, userId, {
+          status: "activo",
+          clientId: client.id,
+          name: name,
+          phone: phone,
+          pin: pin || null,
+          startDate: start,
+          endDate: end,
+          price: null,
+        } as any);
+      }
+
+      // Registrar GANANCIA
+      await storage.createExpense({
+        userId,
+        description: `Venta cuenta completa - ${account.serviceName} - ${name}`,
+        amount: Number(price),
+        type: "ganancia",
+        accountId,
+        profileId: null,
+        date: new Date(),
+        note: `Cliente: ${name} (${phone})`,
+        reference: "VENTA_CUENTA",
+      } as any);
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error selling full account:", error);
+      res.status(500).json({ message: "Failed to sell account" });
     }
   });
 
@@ -276,10 +387,16 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ Create profile: convierte fechas si vienen
   app.post("/api/profiles", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const profile = await storage.createProfile({ ...req.body, userId });
+
+      const body: any = { ...req.body };
+      if ("startDate" in body) body.startDate = toDate(body.startDate);
+      if ("endDate" in body) body.endDate = toDate(body.endDate);
+
+      const profile = await storage.createProfile({ ...body, userId });
       res.json(profile);
     } catch (error) {
       console.error("Error creating profile:", error);
@@ -287,10 +404,16 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ Update profile: convierte fechas si vienen (SOLUCIONA toISOString error)
   app.patch("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const profile = await storage.updateProfile(req.params.id, userId, req.body);
+
+      const updates: any = { ...req.body };
+      if ("startDate" in updates) updates.startDate = toDate(updates.startDate);
+      if ("endDate" in updates) updates.endDate = toDate(updates.endDate);
+
+      const profile = await storage.updateProfile(req.params.id, userId, updates);
       res.json(profile);
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -344,10 +467,17 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ Create expense: convierte date
   app.post("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const expense = await storage.createExpense({ ...req.body, userId });
+      const body: any = { ...req.body };
+
+      // si viene string, lo convertimos a Date
+      if ("date" in body) body.date = toDate(body.date) ?? new Date();
+      else body.date = new Date();
+
+      const expense = await storage.createExpense({ ...body, userId });
       res.json(expense);
     } catch (error) {
       console.error("Error creating expense:", error);

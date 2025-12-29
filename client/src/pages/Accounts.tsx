@@ -79,7 +79,8 @@ export default function Accounts() {
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       isRenewable: newAccount.isRenewable ?? true,
       cost: Number(newAccount.cost) || 0,
-      pricePerProfile: Number(newAccount.pricePerProfile) || 0, // (si luego lo vas a quitar, lo removemos después)
+      // 👇 ya no lo usas en UI, lo dejamos 0 para no romper schema si aún existe
+      pricePerProfile: 0,
       status: 'activa',
     } as any);
 
@@ -126,7 +127,7 @@ export default function Accounts() {
                   <label className="text-xs text-muted-foreground">Servicio</label>
                   <Select
                     onValueChange={(val) => setNewAccount({ ...newAccount, serviceName: val as ServiceType })}
-                    defaultValue="Netflix"
+                    value={(newAccount.serviceName as string) || 'Netflix'}
                   >
                     <SelectTrigger className="glass-input" data-testid="select-service">
                       <SelectValue placeholder="Servicio" />
@@ -179,6 +180,7 @@ export default function Accounts() {
                 />
               </div>
 
+              {/* ✅ CAMBIO: costo + renovable */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Costo ($)</label>
@@ -192,14 +194,19 @@ export default function Accounts() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Precio/Perfil ($)</label>
-                  <Input
-                    type="number"
-                    className="glass-input"
-                    value={(newAccount.pricePerProfile as any) || ''}
-                    onChange={(e) => setNewAccount({ ...newAccount, pricePerProfile: parseFloat(e.target.value) })}
-                    data-testid="input-price-per-profile"
-                  />
+                  <label className="text-xs text-muted-foreground">¿Renovable?</label>
+                  <Select
+                    value={(newAccount.isRenewable ?? true) ? 'si' : 'no'}
+                    onValueChange={(val) => setNewAccount({ ...newAccount, isRenewable: val === 'si' })}
+                  >
+                    <SelectTrigger className="glass-input">
+                      <SelectValue placeholder="Selecciona" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-white/10 text-white">
+                      <SelectItem value="si">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -248,9 +255,7 @@ export default function Accounts() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <MonitorPlay className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">No hay cuentas maestras</h3>
-            <p className="text-muted-foreground text-center mb-6">
-              Registra tu primera cuenta de streaming para comenzar a distribuir perfiles.
-            </p>
+            <p className="text-muted-foreground text-center mb-6">Registra tu primera cuenta de streaming para comenzar a distribuir perfiles.</p>
             <Button onClick={() => setIsAddOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
               <Plus className="mr-2 h-4 w-4" /> Agregar Cuenta
             </Button>
@@ -268,13 +273,11 @@ export default function Accounts() {
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {filteredAccounts.map((account: any) => {
             const daysLeft = differenceInDays(new Date(account.expirationDate), new Date());
-
             const serviceColor = (getServiceColor?.(account.serviceName) as string) || '#6366f1';
 
             const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
             const totalSlots = Number(account.totalProfiles || 0);
 
-            // ✅ SIEMPRE muestra slots = totalProfiles (placeholders si faltan)
             const displayProfiles: ProfileLike[] = Array.from({ length: totalSlots }, (_, idx) => {
               const p = realProfiles[idx];
               return (
@@ -309,7 +312,6 @@ export default function Accounts() {
                         </div>
                       </div>
 
-                      {/* ✅ acciones en columna para que no se corten */}
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <Badge
                           variant={daysLeft < 3 ? 'destructive' : 'default'}
@@ -324,9 +326,7 @@ export default function Accounts() {
                             variant="ghost"
                             className="h-8 px-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-300"
                             title="Editar (próximo paso)"
-                            onClick={() => {
-                              // aquí conectamos el modal de editar cuenta cuando lo agreguemos
-                            }}
+                            onClick={() => {}}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -445,12 +445,7 @@ export default function Accounts() {
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Precio</label>
-                <Input
-                  type="number"
-                  className="glass-input"
-                  value={editData.price}
-                  onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value) })}
-                />
+                <Input type="number" className="glass-input" value={editData.price} onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value) })} />
               </div>
             </div>
 
