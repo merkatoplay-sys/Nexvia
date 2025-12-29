@@ -4,6 +4,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { createUser } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -18,7 +19,7 @@ app.use(
   express.json({
     limit: "5mb",
     verify: (req, _res, buf) => {
-      req.rawBody = buf;
+      (req as any).rawBody = buf;
     },
   }),
 );
@@ -89,5 +90,17 @@ app.use((req, res, next) => {
   httpServer.listen(port, "0.0.0.0", () => {
     log(`Server running on port ${port}`);
   });
+
+  // 🔹 CREAR USUARIO ADMIN INICIAL (SOLO SI NO EXISTE)
+  try {
+    await createUser(
+      "admin@admin.com",
+      "admin123",
+      "Admin",
+      "User"
+    );
+    console.log("✅ Usuario admin creado");
+  } catch {
+    console.log("ℹ️ Usuario admin ya existe");
+  }
 })();
-;
