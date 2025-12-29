@@ -1,14 +1,34 @@
-import { 
+import {
   services, accounts, profiles, clients, expenses, settings,
   type Service, type InsertService,
   type Account, type InsertAccount,
   type Profile, type InsertProfile,
   type Client, type InsertClient,
   type Expense, type InsertExpense,
-  type Settings, type InsertSettings
+  type Settings,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc } from "drizzle-orm";
+
+/**
+ * Drizzle (timestamp) necesita Date.
+ * Desde el frontend siempre llegan strings ISO.
+ * Esto convierte string/number -> Date, y deja Date intacto.
+ * Si viene vacío o inválido -> null (para columnas nullable).
+ */
+function toDateOrNull(value: unknown): Date | null {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (value instanceof Date) return value;
+
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+  }
+
+  return null;
+}
 
 export interface IStorage {
   // Services
@@ -51,8 +71,7 @@ export class DatabaseStorage implements IStorage {
       .from(services)
       .where(eq(services.userId, userId))
       .orderBy(desc(services.createdAt));
-    
-    // Initialize default services for new users
+
     if (userServices.length === 0) {
       await this.initializeDefaultServices(userId);
       return await db
@@ -61,29 +80,26 @@ export class DatabaseStorage implements IStorage {
         .where(eq(services.userId, userId))
         .orderBy(desc(services.createdAt));
     }
-    
+
     return userServices;
   }
 
   async initializeDefaultServices(userId: string): Promise<void> {
     const defaultServices = [
-      { userId, name: 'Netflix', color: '#E50914', maxProfiles: 5, isCustom: false },
-      { userId, name: 'Spotify', color: '#1DB954', maxProfiles: 7, isCustom: false },
-      { userId, name: 'Disney+', color: '#0072F5', maxProfiles: 7, isCustom: false },
-      { userId, name: 'Prime Video', color: '#146EB4', maxProfiles: 7, isCustom: false },
-      { userId, name: 'HBO', color: '#000000', maxProfiles: 7, isCustom: false },
-      { userId, name: 'Crunchyroll', color: '#F47521', maxProfiles: 7, isCustom: false },
-      { userId, name: 'Vix', color: '#7B68EE', maxProfiles: 7, isCustom: false },
+      { userId, name: "Netflix", color: "#E50914", maxProfiles: 5, isCustom: false },
+      { userId, name: "Spotify", color: "#1DB954", maxProfiles: 7, isCustom: false },
+      { userId, name: "Disney+", color: "#0072F5", maxProfiles: 7, isCustom: false },
+      { userId, name: "Prime Video", color: "#146EB4", maxProfiles: 7, isCustom: false },
+      { userId, name: "HBO", color: "#000000", maxProfiles: 7, isCustom: false },
+      { userId, name: "Crunchyroll", color: "#F47521", maxProfiles: 7, isCustom: false },
+      { userId, name: "Vix", color: "#7B68EE", maxProfiles: 7, isCustom: false },
     ];
 
     await db.insert(services).values(defaultServices);
   }
 
   async createService(service: InsertService): Promise<Service> {
-    const [newService] = await db
-      .insert(services)
-      .values(service)
-      .returning();
+    const [newService] = await db.insert(services).values(service).returning();
     return newService;
   }
 
@@ -97,29 +113,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteService(id: string, userId: string): Promise<void> {
-    // First get the service to find its name
     const [service] = await db
       .select()
       .from(services)
       .where(and(eq(services.id, id), eq(services.userId, userId)));
-    
+
     if (!service) return;
 
-    // Get all accounts with this service name
     const serviceAccounts = await db
       .select()
       .from(accounts)
       .where(and(eq(accounts.serviceName, service.name), eq(accounts.userId, userId)));
 
-    // Delete each account (which cascades to profiles and expenses)
     for (const account of serviceAccounts) {
       await this.deleteAccount(account.id, userId);
     }
 
-    // Finally delete the service
-    await db
-      .delete(services)
-      .where(and(eq(services.id, id), eq(services.userId, userId)));
+    await db.delete(services).where(and(eq(services.id, id), eq(services.userId, userId)));
   }
 
   // Accounts
@@ -132,54 +142,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAccount(account: InsertAccount): Promise<Account> {
-    const [newAccount] = await db
-      .insert(accounts)
-      .values(account)
-      .returning();
+    // ✅ Asegurar Date en timestamps
+    const payload: any = { ...account };
+    if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
+    if ("expirationDate" in payload) payload.expirationDate = toDateOrNull(payload.expirationDate);
+
+    const [newAccount] = await db.insert(accounts).values(payload).returning();
     return newAccount;
   }
 
   async updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account> {
+    // ✅ Asegurar Date en timestamps
+    const payload: any = { ...updates };
+    if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
+    if ("expirationDate" in payload) payload.expirationDate = toDateOrNull(payload.expirationDate);
+
     const [updated] = await db
       .update(accounts)
-      .set(updates)
+      .set(payload)
       .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
       .returning();
     return updated;
   }
 
   async deleteAccount(id: string, userId: string): Promise<void> {
-    // Delete associated profiles and expenses first
-    const accountProfiles = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.accountId, id));
-    
-    const profileIds = accountProfiles.map(p => p.id);
-    
-    // Delete expenses associated with profiles
+    const accountProfiles = await db.select().from(profiles).where(eq(profiles.accountId, id));
+    const profileIds = accountProfiles.map((p) => p.id);
+
     if (profileIds.length > 0) {
       for (const profileId of profileIds) {
-        await db
-          .delete(expenses)
-          .where(eq(expenses.profileId, profileId));
+        await db.delete(expenses).where(eq(expenses.profileId, profileId));
       }
     }
-    
-    // Delete expenses associated with account
-    await db
-      .delete(expenses)
-      .where(eq(expenses.accountId, id));
-    
-    // Delete profiles
-    await db
-      .delete(profiles)
-      .where(eq(profiles.accountId, id));
-    
-    // Delete account
-    await db
-      .delete(accounts)
-      .where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+
+    await db.delete(expenses).where(eq(expenses.accountId, id));
+    await db.delete(profiles).where(eq(profiles.accountId, id));
+    await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
   }
 
   // Profiles
@@ -192,32 +190,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
-    const [newProfile] = await db
-      .insert(profiles)
-      .values(profile)
-      .returning();
+    // ✅ Asegurar Date en timestamps
+    const payload: any = { ...profile };
+    if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
+    if ("endDate" in payload) payload.endDate = toDateOrNull(payload.endDate);
+
+    const [newProfile] = await db.insert(profiles).values(payload).returning();
     return newProfile;
   }
 
   async updateProfile(id: string, userId: string, updates: Partial<Profile>): Promise<Profile> {
+    // ✅ ESTE ES EL FIX CLAVE PARA "VENDER PERFIL"
+    const payload: any = { ...updates };
+    if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
+    if ("endDate" in payload) payload.endDate = toDateOrNull(payload.endDate);
+
     const [updated] = await db
       .update(profiles)
-      .set(updates)
+      .set(payload)
       .where(and(eq(profiles.id, id), eq(profiles.userId, userId)))
       .returning();
     return updated;
   }
 
   async deleteProfile(id: string, userId: string): Promise<void> {
-    // Delete associated expenses
-    await db
-      .delete(expenses)
-      .where(eq(expenses.profileId, id));
-    
-    // Delete profile
-    await db
-      .delete(profiles)
-      .where(and(eq(profiles.id, id), eq(profiles.userId, userId)));
+    await db.delete(expenses).where(eq(expenses.profileId, id));
+    await db.delete(profiles).where(and(eq(profiles.id, id), eq(profiles.userId, userId)));
   }
 
   // Clients
@@ -230,10 +228,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createClient(client: InsertClient): Promise<Client> {
-    const [newClient] = await db
-      .insert(clients)
-      .values(client)
-      .returning();
+    const [newClient] = await db.insert(clients).values(client).returning();
     return newClient;
   }
 
@@ -247,36 +242,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
-    const [newExpense] = await db
-      .insert(expenses)
-      .values(expense)
-      .returning();
+    // ✅ Asegurar Date en timestamp(date)
+    const payload: any = { ...expense };
+    if ("date" in payload) payload.date = toDateOrNull(payload.date) ?? new Date();
+
+    const [newExpense] = await db.insert(expenses).values(payload).returning();
     return newExpense;
   }
 
   // Settings
   async getSettings(userId: string): Promise<Settings | null> {
-    const [userSettings] = await db
-      .select()
-      .from(settings)
-      .where(eq(settings.userId, userId));
-    
-    // If no settings exist, create defaults
+    const [userSettings] = await db.select().from(settings).where(eq(settings.userId, userId));
+
     if (!userSettings) {
       const [defaultSettings] = await db
         .insert(settings)
         .values({
           userId,
-          defaultCurrency: 'USD',
+          defaultCurrency: "USD",
           notificationsEnabled: true,
-          notificationChannel: 'telegram',
+          notificationChannel: "telegram",
           daysBeforeExpiry: 3,
-          notificationTime: '09:00'
+          notificationTime: "09:00",
         })
         .returning();
       return defaultSettings;
     }
-    
+
     return userSettings;
   }
 
@@ -286,19 +278,12 @@ export class DatabaseStorage implements IStorage {
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(settings.userId, userId))
       .returning();
-    
-    // If no settings existed, create them
+
     if (!updated) {
-      const [newSettings] = await db
-        .insert(settings)
-        .values({
-          ...updates,
-          userId,
-        })
-        .returning();
+      const [newSettings] = await db.insert(settings).values({ ...updates, userId }).returning();
       return newSettings;
     }
-    
+
     return updated;
   }
 }
