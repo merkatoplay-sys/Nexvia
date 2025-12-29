@@ -9,28 +9,18 @@ import {
   comparePassword,
   generateToken,
   toSafeUser,
-  getUserById,
+  getUserById
 } from "./auth";
 import { storage } from "./storage";
 import { insertUserSchema, loginSchema } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
-// ✅ Helpers: convierten strings/valores del front a tipos que Drizzle/Postgres esperan
-function toDate(value: any): Date | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (value instanceof Date) return value;
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function toNumber(value: any, fallback: number = 0): number {
-  if (value === null || value === undefined || value === "") return fallback;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  // Add cookie parser middleware
   app.use(cookieParser());
 
   // Auth routes
@@ -39,25 +29,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = insertUserSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({
-          message: result.error.errors[0]?.message || "Datos inválidos",
+          message: result.error.errors[0]?.message || "Datos inválidos"
         });
       }
 
       const { email, password, firstName, lastName } = result.data;
 
+      // Check if user exists
       const existingUser = await getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ message: "Este correo ya pertenece a una cuenta" });
       }
 
+      // Create user
       const user = await createUser(email, password, firstName ?? undefined, lastName ?? undefined);
       const token = generateToken(user.id, user.email);
 
+      // Set cookie
       res.cookie("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
       res.json({ user: toSafeUser(user), token });
@@ -72,25 +65,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const result = loginSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({
-          message: result.error.errors[0]?.message || "Datos inválidos",
+          message: result.error.errors[0]?.message || "Datos inválidos"
         });
       }
 
       const { email, password } = result.data;
 
+      // Find user
       const user = await getUserByEmail(email);
-      if (!user) return res.status(401).json({ message: "No existe una cuenta con este correo" });
+      if (!user) {
+        return res.status(401).json({ message: "No existe una cuenta con este correo" });
+      }
 
+      // Verify password
       const isValid = await comparePassword(password, user.passwordHash);
-      if (!isValid) return res.status(401).json({ message: "Contraseña incorrecta" });
+      if (!isValid) {
+        return res.status(401).json({ message: "Contraseña incorrecta" });
+      }
 
+      // Generate token
       const token = generateToken(user.id, user.email);
 
+      // Set cookie
       res.cookie("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
       res.json({ user: toSafeUser(user), token });
@@ -132,14 +133,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/services", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-
-      const payload = {
-        ...req.body,
-        userId,
-        maxProfiles: toNumber(req.body?.maxProfiles, 7),
-      };
-
-      const service = await storage.createService(payload);
+      const service = await storage.createService({ ...req.body, userId });
       res.json(service);
     } catch (error) {
       console.error("Error creating service:", error);
@@ -150,13 +144,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/services/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-
-      const updates = {
-        ...req.body,
-        ...(req.body?.maxProfiles !== undefined ? { maxProfiles: toNumber(req.body.maxProfiles, 7) } : {}),
-      };
-
-      const service = await storage.updateService(req.params.id, userId, updates);
+      const service = await storage.updateService(req.params.id, userId, req.body);
       res.json(service);
     } catch (error) {
       console.error("Error updating service:", error);
@@ -211,14 +199,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Serve uploaded files
   app.use("/uploads", (await import("express")).default.static(path.join(process.cwd(), "uploads")));
 
-  // Accounts routes
+  // Accounts routes ✅ (AHORA incluye profiles)
   app.get("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const accounts = await storage.getAccounts(userId);
-      res.json(accounts);
+
+      const [accounts, profiles] = await Promise.all([
+        storage.getAccounts(userId),
+        storage.getProfiles(userId),
+      ]);
+
+      const byAccount: Record<string, any[]> = {};
+      for (const p of profiles) {
+        if (!p?.accountId) continue;
+        if (!byAccount[p.accountId]) byAccount[p.accountId] = [];
+        byAccount[p.accountId].push(p);
+      }
+
+      const accountsWithProfiles = accounts.map(a => ({
+        ...a,
+        profiles: byAccount[a.id] ?? [],
+      }));
+
+      res.json(accountsWithProfiles);
     } catch (error) {
       console.error("Error fetching accounts:", error);
       res.status(500).json({ message: "Failed to fetch accounts" });
@@ -228,24 +234,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-
-      // ✅ Convertimos timestamps a Date y números a number
-      const startDate = toDate(req.body?.startDate) ?? new Date();
-      const expirationDate =
-        toDate(req.body?.expirationDate) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-      const payload = {
-        ...req.body,
-        userId,
-        totalProfiles: toNumber(req.body?.totalProfiles, 5),
-        cost: toNumber(req.body?.cost, 0),
-        pricePerProfile: toNumber(req.body?.pricePerProfile, 0),
-        startDate,
-        expirationDate,
-        status: req.body?.status || "activa",
-      };
-
-      const account = await storage.createAccount(payload);
+      const account = await storage.createAccount({ ...req.body, userId });
       res.json(account);
     } catch (error) {
       console.error("Error creating account:", error);
@@ -256,17 +245,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-
-      const updates: any = { ...req.body };
-
-      if (updates.totalProfiles !== undefined) updates.totalProfiles = toNumber(updates.totalProfiles, 5);
-      if (updates.cost !== undefined) updates.cost = toNumber(updates.cost, 0);
-      if (updates.pricePerProfile !== undefined) updates.pricePerProfile = toNumber(updates.pricePerProfile, 0);
-
-      if (updates.startDate !== undefined) updates.startDate = toDate(updates.startDate);
-      if (updates.expirationDate !== undefined) updates.expirationDate = toDate(updates.expirationDate);
-
-      const account = await storage.updateAccount(req.params.id, userId, updates);
+      const account = await storage.updateAccount(req.params.id, userId, req.body);
       res.json(account);
     } catch (error) {
       console.error("Error updating account:", error);
@@ -300,16 +279,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/profiles", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-
-      const payload = {
-        ...req.body,
-        userId,
-        price: req.body?.price !== undefined ? toNumber(req.body.price, 0) : null,
-        startDate: req.body?.startDate !== undefined ? toDate(req.body.startDate) : null,
-        endDate: req.body?.endDate !== undefined ? toDate(req.body.endDate) : null,
-      };
-
-      const profile = await storage.createProfile(payload);
+      const profile = await storage.createProfile({ ...req.body, userId });
       res.json(profile);
     } catch (error) {
       console.error("Error creating profile:", error);
@@ -319,15 +289,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
-      const userId = getUserId(req); // se mantiene para consistencia, aunque storage valida por userId internamente
-
-      const updates: any = { ...req.body };
-
-      if (updates.price !== undefined) updates.price = updates.price === null ? null : toNumber(updates.price, 0);
-      if (updates.startDate !== undefined) updates.startDate = updates.startDate === null ? null : toDate(updates.startDate);
-      if (updates.endDate !== undefined) updates.endDate = updates.endDate === null ? null : toDate(updates.endDate);
-
-      const profile = await storage.updateProfile(req.params.id, userId, updates);
+      const userId = getUserId(req);
+      const profile = await storage.updateProfile(req.params.id, userId, req.body);
       res.json(profile);
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -384,15 +347,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-
-      const payload = {
-        ...req.body,
-        userId,
-        amount: toNumber(req.body?.amount, 0),
-        date: toDate(req.body?.date) ?? new Date(),
-      };
-
-      const expense = await storage.createExpense(payload);
+      const expense = await storage.createExpense({ ...req.body, userId });
       res.json(expense);
     } catch (error) {
       console.error("Error creating expense:", error);

@@ -9,7 +9,17 @@ import { createUser } from "./auth";
 const app = express();
 const httpServer = createServer(app);
 
-// ✅ FIX: Evitar 304/ETag en APIs (Railway + fetch/json)
+declare module "http" {
+  interface IncomingMessage {
+    rawBody: unknown;
+  }
+}
+
+/**
+ * ✅ IMPORTANTE:
+ * - Evita 304 Not Modified en /api/*
+ * - Evita que el front reciba "undefined/null" por caching
+ */
 app.set("etag", false);
 app.use("/api", (_req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -18,12 +28,6 @@ app.use("/api", (_req, res, next) => {
   res.setHeader("Surrogate-Control", "no-store");
   next();
 });
-
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
-  }
-}
 
 app.use(
   express.json({
@@ -91,10 +95,7 @@ app.use((req, res, next) => {
   }
 
   const port = Number(process.env.PORT);
-
-  if (!port) {
-    throw new Error("PORT is not defined");
-  }
+  if (!port) throw new Error("PORT is not defined");
 
   httpServer.listen(port, "0.0.0.0", () => {
     log(`Server running on port ${port}`);
@@ -102,17 +103,9 @@ app.use((req, res, next) => {
 
   // 🔹 CREAR USUARIO ADMIN INICIAL (SOLO SI NO EXISTE)
   try {
-    await createUser(
-      "admin@admin.com",
-      "admin123",
-      "Admin",
-      "User"
-    );
+    await createUser("admin@admin.com", "admin123", "Admin", "User");
     console.log("✅ Usuario admin creado");
-  } catch (err) {
-    // OJO: aquí puede fallar por "ya existe" o por otra cosa.
-    console.log("ℹ️ Usuario admin ya existe o no se pudo crear");
-    // Si quieres ver el motivo real, descomenta:
-    // console.error(err);
+  } catch {
+    console.log("ℹ️ Usuario admin ya existe");
   }
 })();
