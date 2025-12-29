@@ -1,10 +1,20 @@
 import {
-  services, accounts, profiles, clients, expenses, settings,
-  type Service, type InsertService,
-  type Account, type InsertAccount,
-  type Profile, type InsertProfile,
-  type Client, type InsertClient,
-  type Expense, type InsertExpense,
+  services,
+  accounts,
+  profiles,
+  clients,
+  expenses,
+  settings,
+  type Service,
+  type InsertService,
+  type Account,
+  type InsertAccount,
+  type Profile,
+  type InsertProfile,
+  type Client,
+  type InsertClient,
+  type Expense,
+  type InsertExpense,
   type Settings,
 } from "@shared/schema";
 import { db } from "./db";
@@ -12,13 +22,12 @@ import { eq, and, desc } from "drizzle-orm";
 
 /**
  * Drizzle (timestamp) necesita Date.
- * Desde el frontend siempre llegan strings ISO.
- * Esto convierte string/number -> Date, y deja Date intacto.
- * Si viene vacío o inválido -> null (para columnas nullable).
+ * En Railway/Frontend suelen llegar strings ISO.
+ * Esto convierte string/number -> Date, deja Date intacto.
+ * Si viene inválido -> null (para campos nullable).
  */
 function toDateOrNull(value: unknown): Date | null {
-  if (value === undefined) return null;
-  if (value === null) return null;
+  if (value === undefined || value === null) return null;
   if (value instanceof Date) return value;
 
   if (typeof value === "string" || typeof value === "number") {
@@ -34,20 +43,32 @@ export interface IStorage {
   // Services
   getServices(userId: string): Promise<Service[]>;
   createService(service: InsertService): Promise<Service>;
-  updateService(id: string, userId: string, updates: Partial<Service>): Promise<Service>;
+  updateService(
+    id: string,
+    userId: string,
+    updates: Partial<Service>,
+  ): Promise<Service>;
   deleteService(id: string, userId: string): Promise<void>;
   initializeDefaultServices(userId: string): Promise<void>;
 
   // Accounts
   getAccounts(userId: string): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
-  updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account>;
+  updateAccount(
+    id: string,
+    userId: string,
+    updates: Partial<Account>,
+  ): Promise<Account>;
   deleteAccount(id: string, userId: string): Promise<void>;
 
   // Profiles
   getProfiles(userId: string): Promise<Profile[]>;
   createProfile(profile: InsertProfile): Promise<Profile>;
-  updateProfile(id: string, userId: string, updates: Partial<Profile>): Promise<Profile>;
+  updateProfile(
+    id: string,
+    userId: string,
+    updates: Partial<Profile>,
+  ): Promise<Profile>;
   deleteProfile(id: string, userId: string): Promise<void>;
 
   // Clients
@@ -103,12 +124,17 @@ export class DatabaseStorage implements IStorage {
     return newService;
   }
 
-  async updateService(id: string, userId: string, updates: Partial<Service>): Promise<Service> {
+  async updateService(
+    id: string,
+    userId: string,
+    updates: Partial<Service>,
+  ): Promise<Service> {
     const [updated] = await db
       .update(services)
       .set(updates)
       .where(and(eq(services.id, id), eq(services.userId, userId)))
       .returning();
+
     return updated;
   }
 
@@ -142,7 +168,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAccount(account: InsertAccount): Promise<Account> {
-    // ✅ Asegurar Date en timestamps
+    // ✅ Convertir timestamps si llegan como string
     const payload: any = { ...account };
     if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
     if ("expirationDate" in payload) payload.expirationDate = toDateOrNull(payload.expirationDate);
@@ -151,8 +177,12 @@ export class DatabaseStorage implements IStorage {
     return newAccount;
   }
 
-  async updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account> {
-    // ✅ Asegurar Date en timestamps
+  async updateAccount(
+    id: string,
+    userId: string,
+    updates: Partial<Account>,
+  ): Promise<Account> {
+    // ✅ Convertir timestamps si llegan como string
     const payload: any = { ...updates };
     if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
     if ("expirationDate" in payload) payload.expirationDate = toDateOrNull(payload.expirationDate);
@@ -162,6 +192,7 @@ export class DatabaseStorage implements IStorage {
       .set(payload)
       .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
       .returning();
+
     return updated;
   }
 
@@ -190,7 +221,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProfile(profile: InsertProfile): Promise<Profile> {
-    // ✅ Asegurar Date en timestamps
+    // ✅ Convertir timestamps si llegan como string
     const payload: any = { ...profile };
     if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
     if ("endDate" in payload) payload.endDate = toDateOrNull(payload.endDate);
@@ -199,8 +230,12 @@ export class DatabaseStorage implements IStorage {
     return newProfile;
   }
 
-  async updateProfile(id: string, userId: string, updates: Partial<Profile>): Promise<Profile> {
-    // ✅ ESTE ES EL FIX CLAVE PARA "VENDER PERFIL"
+  async updateProfile(
+    id: string,
+    userId: string,
+    updates: Partial<Profile>,
+  ): Promise<Profile> {
+    // ✅ ESTE ES EL FIX CLAVE PARA VENDER / RENOVAR (timestamp -> Date)
     const payload: any = { ...updates };
     if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
     if ("endDate" in payload) payload.endDate = toDateOrNull(payload.endDate);
@@ -210,6 +245,7 @@ export class DatabaseStorage implements IStorage {
       .set(payload)
       .where(and(eq(profiles.id, id), eq(profiles.userId, userId)))
       .returning();
+
     return updated;
   }
 
@@ -242,7 +278,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
-    // ✅ Asegurar Date en timestamp(date)
+    // ✅ Convertir date si llega como string
     const payload: any = { ...expense };
     if ("date" in payload) payload.date = toDateOrNull(payload.date) ?? new Date();
 
@@ -266,6 +302,7 @@ export class DatabaseStorage implements IStorage {
           notificationTime: "09:00",
         })
         .returning();
+
       return defaultSettings;
     }
 
@@ -280,7 +317,10 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     if (!updated) {
-      const [newSettings] = await db.insert(settings).values({ ...updates, userId }).returning();
+      const [newSettings] = await db
+        .insert(settings)
+        .values({ ...updates, userId } as any)
+        .returning();
       return newSettings;
     }
 
