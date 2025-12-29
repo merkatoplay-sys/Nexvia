@@ -12,11 +12,11 @@ import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
 export default function Accounts() {
-  const { accounts, addAccount, clients, updateProfile, deleteAccount, getMaxProfilesByService, services } = useStreaming();
+  const { accounts, addAccount, clients, updateProfile, deleteAccount, getMaxProfilesByService, services, getServiceColor } = useStreaming();
 
-  const accountsSafe = Array.isArray(accounts) ? accounts : [];
-  const servicesSafe = Array.isArray(services) ? services : [];
-  const clientsSafe = Array.isArray(clients) ? clients : [];
+  const accountsSafe = accounts ?? [];
+  const servicesSafe = services ?? [];
+  const clientsSafe = clients ?? [];
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
@@ -29,7 +29,6 @@ export default function Accounts() {
     serviceName: 'Netflix',
     totalProfiles: 5,
     isRenewable: true,
-    profiles: []
   });
 
   const filteredAccounts = accountsSafe.filter(acc => {
@@ -40,11 +39,10 @@ export default function Accounts() {
     return matchesSearch && matchesService;
   });
 
-  // ✅ IMPORTANTE: async + await
   const handleAddAccount = async () => {
     if (!newAccount.email || !newAccount.cost) return;
 
-    const success = await addAccount({
+    const ok = await addAccount({
       serviceName: (newAccount.serviceName as ServiceType) || 'Netflix',
       email: newAccount.email || '',
       password: newAccount.password || '',
@@ -56,13 +54,12 @@ export default function Accounts() {
       pricePerProfile: Number(newAccount.pricePerProfile) || 0,
     });
 
-    if (success) {
+    if (ok) {
       setIsAddOpen(false);
       setNewAccount({
         serviceName: 'Netflix',
         totalProfiles: 5,
         isRenewable: true,
-        profiles: []
       });
     }
   };
@@ -72,20 +69,6 @@ export default function Accounts() {
       await deleteAccount(deleteConfirm.id);
       setDeleteConfirm({ open: false, id: '', name: '', email: '' });
     }
-  };
-
-  const handleSaveProfile = async () => {
-    if (!editingProfile) return;
-
-    await updateProfile(editingProfile.accountId, editingProfile.profile.id, {
-      name: editData.name,
-      pin: editData.pin || undefined,
-      clientId: editData.clientId || undefined,
-      phone: editData.phone || undefined,
-      price: editData.price || undefined
-    });
-
-    setEditingProfile(null);
   };
 
   return (
@@ -102,7 +85,6 @@ export default function Accounts() {
               <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
             </Button>
           </DialogTrigger>
-
           <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
             <DialogHeader>
               <DialogTitle>Registrar Nueva Cuenta</DialogTitle>
@@ -134,8 +116,8 @@ export default function Accounts() {
                   <Input
                     type="number"
                     className="glass-input"
-                    value={newAccount.totalProfiles ?? 5}
-                    onChange={e => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value || '0') })}
+                    value={newAccount.totalProfiles || 5}
+                    onChange={e => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value) })}
                     max={getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')}
                   />
                 </div>
@@ -145,6 +127,7 @@ export default function Accounts() {
                 <label className="text-xs text-muted-foreground">Email de la cuenta</label>
                 <Input
                   className="glass-input"
+                  placeholder="ejemplo@correo.com"
                   value={newAccount.email || ''}
                   onChange={e => setNewAccount({ ...newAccount, email: e.target.value })}
                 />
@@ -155,6 +138,7 @@ export default function Accounts() {
                 <Input
                   className="glass-input"
                   type="password"
+                  placeholder="••••••••"
                   value={newAccount.password || ''}
                   onChange={e => setNewAccount({ ...newAccount, password: e.target.value })}
                 />
@@ -166,7 +150,7 @@ export default function Accounts() {
                   <Input
                     type="number"
                     className="glass-input"
-                    value={newAccount.cost ?? ''}
+                    value={newAccount.cost || ''}
                     onChange={e => setNewAccount({ ...newAccount, cost: parseFloat(e.target.value) })}
                   />
                 </div>
@@ -175,7 +159,7 @@ export default function Accounts() {
                   <Input
                     type="number"
                     className="glass-input"
-                    value={newAccount.pricePerProfile ?? ''}
+                    value={newAccount.pricePerProfile || ''}
                     onChange={e => setNewAccount({ ...newAccount, pricePerProfile: parseFloat(e.target.value) })}
                   />
                 </div>
@@ -222,6 +206,9 @@ export default function Accounts() {
             <p className="text-muted-foreground text-center mb-6">
               Registra tu primera cuenta de streaming para comenzar a distribuir perfiles.
             </p>
+            <Button onClick={() => setIsAddOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
+              <Plus className="mr-2 h-4 w-4" /> Agregar Cuenta
+            </Button>
           </CardContent>
         </Card>
       ) : filteredAccounts.length === 0 ? (
@@ -229,31 +216,37 @@ export default function Accounts() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Search className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">Sin resultados</h3>
-            <p className="text-muted-foreground text-center">No se encontraron cuentas que coincidan con tu búsqueda.</p>
+            <p className="text-muted-foreground text-center">
+              No se encontraron cuentas que coincidan con tu búsqueda.
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {filteredAccounts.map((account) => {
             const daysLeft = differenceInDays(new Date(account.expirationDate), new Date());
-            const profiles = Array.isArray(account.profiles) ? account.profiles : [];
+            const serviceColor = getServiceColor(account.serviceName);
 
             return (
               <motion.div key={account.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
-                <Card className="glass-card overflow-hidden">
+                <Card className="glass-card overflow-hidden group hover:border-primary/30 transition-all duration-300">
                   <CardHeader className="bg-white/5 border-b border-white/5 pb-3">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg bg-primary">
-                          {account.serviceName.substring(0, 1)}
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg"
+                          style={{ backgroundColor: serviceColor }}
+                        >
+                          {(account.serviceName || '?').substring(0, 1)}
                         </div>
                         <div>
                           <CardTitle className="text-lg text-white">{account.serviceName}</CardTitle>
                           <p className="text-xs text-muted-foreground truncate max-w-[150px]">{account.email}</p>
                         </div>
                       </div>
+
                       <div className="flex items-center gap-2">
-                        <Badge variant={daysLeft < 3 ? "destructive" : "default"} className={`${daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400' : ''}`}>
+                        <Badge variant={daysLeft < 3 ? "destructive" : "default"} className={`${daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}`}>
                           {daysLeft} días
                         </Badge>
                         <Button
@@ -283,7 +276,7 @@ export default function Accounts() {
                     <div className="space-y-2">
                       <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Perfiles</h4>
 
-                      {profiles.map((profile: any) => (
+                      {(account.profiles ?? []).map((profile: any) => (
                         <div
                           key={profile.id}
                           className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm cursor-pointer"
@@ -355,7 +348,21 @@ export default function Accounts() {
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">Cancelar</Button>
-              <Button onClick={handleSaveProfile} className="bg-primary text-white">Guardar</Button>
+              <Button
+                onClick={async () => {
+                  await updateProfile(editingProfile.accountId, editingProfile.profile.id, {
+                    name: editData.name,
+                    pin: editData.pin || undefined,
+                    clientId: editData.clientId || undefined,
+                    phone: editData.phone || undefined,
+                    price: editData.price || undefined
+                  });
+                  setEditingProfile(null);
+                }}
+                className="bg-primary text-white"
+              >
+                Guardar
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

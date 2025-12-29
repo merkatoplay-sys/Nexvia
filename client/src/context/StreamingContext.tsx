@@ -14,7 +14,6 @@ export interface Service {
   color: string;
   maxProfiles: number;
   isCustom: boolean;
-  imageUrl?: string | null;
   createdAt?: Date;
 }
 
@@ -47,9 +46,11 @@ export interface Account {
   pricePerProfile: number;
   status: 'activa' | 'por vencer' | 'vencida';
   createdAt?: Date;
-}
 
-export type AccountWithProfiles = Account & { profiles: Profile[] };
+  // ✅ IMPORTANTE: los perfiles NO vienen del backend en /api/accounts
+  // los unimos en el context para que UI funcione.
+  profiles?: Profile[];
+}
 
 export interface Client {
   id: string;
@@ -87,8 +88,23 @@ export interface AppSettings {
   whatsappPhoneNumber?: string | null;
 }
 
+type AddAccountInput = {
+  serviceName: ServiceType;
+  email: string;
+  password?: string;
+  totalProfiles: number;
+  startDate: string;
+  expirationDate: string;
+  isRenewable: boolean;
+  cost: number;
+  pricePerProfile: number;
+
+  // opcional: algunos componentes lo mandan, lo ignoramos
+  profiles?: any[];
+};
+
 interface StreamingContextType {
-  accounts: AccountWithProfiles[];
+  accounts: Account[];
   clients: Client[];
   expenses: Expense[];
   services: Service[];
@@ -96,7 +112,7 @@ interface StreamingContextType {
   settings: AppSettings | null;
   isLoading: boolean;
 
-  addAccount: (account: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => Promise<boolean>;
+  addAccount: (account: AddAccountInput) => Promise<boolean>;
   updateAccount: (id: string, updates: Partial<Account>) => Promise<boolean>;
   deleteAccount: (id: string) => Promise<void>;
 
@@ -108,9 +124,7 @@ interface StreamingContextType {
 
   renewProfile: (accountId: string, profileId: string, renewalPrice: number) => Promise<boolean>;
   renewAccount: (accountId: string) => Promise<boolean>;
-
   updateProfile: (accountId: string, profileId: string, updates: Partial<Profile>) => Promise<boolean>;
-  deleteProfile: (accountId: string, profileId: string) => Promise<void>;
 
   addClient: (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => Promise<string>;
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
@@ -126,7 +140,10 @@ interface StreamingContextType {
   getServiceColor: (serviceName: string) => string;
   getMaxProfilesByService: (serviceName: ServiceType) => number;
 
+  deleteProfile: (accountId: string, profileId: string) => Promise<void>;
+
   sendTelegramTestNotification: (botToken: string, chatId: string) => Promise<boolean>;
+
   renewAccountMaster: (accountId: string, renewalDays: number, cost: number) => Promise<boolean>;
   renewProfileSale: (accountId: string, profileId: string, renewalDays: number, cost: number) => Promise<boolean>;
   processRefund: (profileId: string, amount: number, reason: string) => Promise<boolean>;
@@ -137,7 +154,6 @@ const StreamingContext = createContext<StreamingContextType | undefined>(undefin
 
 async function fetchAPI(url: string, options?: RequestInit) {
   const res = await fetch(url, {
-    credentials: 'include',
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -145,80 +161,83 @@ async function fetchAPI(url: string, options?: RequestInit) {
     },
   });
 
-  // 204/304 pueden venir sin body
-  const text = await res.text().catch(() => '');
-
   if (!res.ok) {
     if (res.status === 401) throw new Error('Unauthorized');
-    try {
-      const errorData = text ? JSON.parse(text) : { message: 'Error del servidor' };
-      throw new Error(errorData.message || 'Error del servidor');
-    } catch {
-      throw new Error('Error del servidor');
-    }
+    const errorData = await res.json().catch(() => ({ message: 'Error del servidor' }));
+    throw new Error(errorData.message || 'Error del servidor');
   }
 
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  return res.json();
 }
 
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
-  // ✅ Fuente principal: Accounts ya trae profiles
-  const { data: accounts = [], isLoading: accountsLoading } = useQuery({
+  // ✅ RAW desde backend
+  const { data: accountsRaw = [], isLoading: accountsLoading } = useQuery({
     queryKey: ['/api/accounts'],
-    queryFn: async () => (await fetchAPI('/api/accounts')) ?? [],
+    queryFn: () => fetchAPI('/api/accounts'),
     enabled: isAuthenticated,
   });
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
     queryKey: ['/api/clients'],
-    queryFn: async () => (await fetchAPI('/api/clients')) ?? [],
+    queryFn: () => fetchAPI('/api/clients'),
     enabled: isAuthenticated,
   });
 
   const { data: expenses = [], isLoading: expensesLoading } = useQuery({
     queryKey: ['/api/expenses'],
-    queryFn: async () => (await fetchAPI('/api/expenses')) ?? [],
+    queryFn: () => fetchAPI('/api/expenses'),
     enabled: isAuthenticated,
   });
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
     queryKey: ['/api/services'],
-    queryFn: async () => (await fetchAPI('/api/services')) ?? [],
+    queryFn: () => fetchAPI('/api/services'),
+    enabled: isAuthenticated,
+  });
+
+  const { data: profilesRaw = [], isLoading: profilesLoading } = useQuery({
+    queryKey: ['/api/profiles'],
+    queryFn: () => fetchAPI('/api/profiles'),
     enabled: isAuthenticated,
   });
 
   const { data: settings = null, isLoading: settingsLoading } = useQuery({
     queryKey: ['/api/settings'],
-    queryFn: async () => (await fetchAPI('/api/settings')) ?? null,
+    queryFn: () => fetchAPI('/api/settings'),
     enabled: isAuthenticated,
   });
 
-  const profiles: Profile[] = useMemo(() => {
-    const list = Array.isArray(accounts) ? accounts : [];
-    return list.flatMap((a: any) => Array.isArray(a?.profiles) ? a.profiles : []);
-  }, [accounts]);
+  // ✅ Unimos accounts + profiles aquí (lo que el backend NO devuelve junto)
+  const accounts: Account[] = useMemo(() => {
+    const profs = (profilesRaw ?? []) as Profile[];
+    const accs = (accountsRaw ?? []) as Account[];
 
-  const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || settingsLoading;
+    return accs.map(a => ({
+      ...a,
+      profiles: profs.filter(p => p.accountId === a.id),
+    }));
+  }, [accountsRaw, profilesRaw]);
+
+  const profiles: Profile[] = (profilesRaw ?? []) as Profile[];
+
+  const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
 
   const createAccountMutation = useMutation({
     mutationFn: (account: any) => fetchAPI('/api/accounts', { method: 'POST', body: JSON.stringify(account) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
         toast.error('Sesión expirada. Redirigiendo...');
-        setTimeout(() => { window.location.href = '/api/login'; }, 500);
-      } else {
-        toast.error(error.message || 'Error al crear la cuenta');
+        setTimeout(() => {
+          window.location.href = '/api/login';
+        }, 500);
       }
     },
   });
@@ -226,49 +245,71 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const updateAccountMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Account> }) =>
       fetchAPI(`/api/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/accounts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast.error('Sesión expirada. Redirigiendo...');
+        setTimeout(() => {
+          window.location.href = '/api/login';
+        }, 500);
+      }
+    },
   });
 
   const deleteAccountMutation = useMutation({
     mutationFn: (id: string) => fetchAPI(`/api/accounts/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
     },
   });
 
   const createServiceMutation = useMutation({
     mutationFn: (service: any) => fetchAPI('/api/services', { method: 'POST', body: JSON.stringify(service) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/services'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+    },
   });
 
   const updateServiceMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Service> }) =>
       fetchAPI(`/api/services/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/services'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+    },
   });
 
   const deleteServiceMutation = useMutation({
     mutationFn: (id: string) => fetchAPI(`/api/services/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/services'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+    },
   });
 
-  // Profiles siguen siendo endpoint propio para mutaciones,
-  // pero la UI se refresca invalidando /api/accounts
   const createProfileMutation = useMutation({
     mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/accounts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
   });
 
   const updateProfileMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Profile> }) =>
       fetchAPI(`/api/profiles/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/accounts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
   });
 
   const deleteProfileMutation = useMutation({
     mutationFn: (id: string) => fetchAPI(`/api/profiles/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
     },
@@ -276,38 +317,26 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const createClientMutation = useMutation({
     mutationFn: (client: any) => fetchAPI('/api/clients', { method: 'POST', body: JSON.stringify(client) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/clients'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+    },
   });
 
   const createExpenseMutation = useMutation({
     mutationFn: (expense: any) => fetchAPI('/api/expenses', { method: 'POST', body: JSON.stringify(expense) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+    },
   });
 
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: any) => fetchAPI('/api/settings', { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/settings'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+    },
   });
 
-  const addClient = async (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => {
-    try {
-      const created = await createClientMutation.mutateAsync(client);
-      return created?.id || '';
-    } catch {
-      toast.error('Error al agregar cliente');
-      return '';
-    }
-  };
-
-  const addExpense = async (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => {
-    try {
-      await createExpenseMutation.mutateAsync(expense);
-    } catch {
-      toast.error('Error al registrar transacción');
-    }
-  };
-
-  const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
+  const addAccount = async (newAccount: AddAccountInput) => {
     const service = services.find(s => s.name === newAccount.serviceName);
     const maxProfiles = service?.maxProfiles || 7;
 
@@ -316,11 +345,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
 
+    const accountToCreate = {
+      ...newAccount,
+      status: 'activa' as const,
+    };
+
     try {
-      const createdAccount = await createAccountMutation.mutateAsync({
-        ...newAccount,
-        status: 'activa' as const,
-      });
+      const createdAccount = await createAccountMutation.mutateAsync(accountToCreate);
 
       const profilesData = Array.from({ length: newAccount.totalProfiles }, () => ({
         accountId: createdAccount.id,
@@ -328,11 +359,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         status: 'disponible' as const,
       }));
 
-      await Promise.all(profilesData.map(p => createProfileMutation.mutateAsync(p)));
+      await Promise.all(profilesData.map(profile => createProfileMutation.mutateAsync(profile)));
 
       toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
       return true;
-    } catch {
+    } catch (error) {
       toast.error('Error al crear la cuenta');
       return false;
     }
@@ -343,7 +374,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await updateAccountMutation.mutateAsync({ id, updates });
       toast.success('Cuenta actualizada exitosamente');
       return true;
-    } catch {
+    } catch (error) {
       toast.error('Error al actualizar la cuenta');
       return false;
     }
@@ -353,8 +384,26 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       await deleteAccountMutation.mutateAsync(id);
       toast.success('Cuenta maestra y sus perfiles eliminados');
-    } catch {
+    } catch (error) {
       toast.error('Error al eliminar la cuenta');
+    }
+  };
+
+  const addClient = async (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => {
+    try {
+      const created = await createClientMutation.mutateAsync(client);
+      return created.id;
+    } catch (error) {
+      toast.error('Error al agregar cliente');
+      return '';
+    }
+  };
+
+  const addExpense = async (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => {
+    try {
+      await createExpenseMutation.mutateAsync(expense);
+    } catch (error) {
+      toast.error('Error al registrar transacción');
     }
   };
 
@@ -368,8 +417,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
     try {
-      return await createServiceMutation.mutateAsync(service);
-    } catch {
+      const createdService = await createServiceMutation.mutateAsync(service);
+      return createdService;
+    } catch (error) {
       toast.error('Error al crear el servicio');
       return null;
     }
@@ -380,38 +430,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await updateServiceMutation.mutateAsync({ id, updates });
       toast.success('Servicio actualizado exitosamente');
       return true;
-    } catch {
+    } catch (error) {
       toast.error('Error al actualizar el servicio');
       return false;
-    }
-  };
-
-  const deleteService = async (id: string) => {
-    try {
-      await deleteServiceMutation.mutateAsync(id);
-      toast.success('Servicio eliminado');
-    } catch {
-      toast.error('Error al eliminar el servicio');
-    }
-  };
-
-  const updateProfile = async (_accountId: string, profileId: string, updates: Partial<Profile>) => {
-    try {
-      await updateProfileMutation.mutateAsync({ id: profileId, updates });
-      toast.success('Perfil actualizado exitosamente');
-      return true;
-    } catch {
-      toast.error('Error al actualizar el perfil');
-      return false;
-    }
-  };
-
-  const deleteProfile = async (_accountId: string, profileId: string) => {
-    try {
-      await deleteProfileMutation.mutateAsync(profileId);
-      toast.success('Perfil eliminado');
-    } catch {
-      toast.error('Error al eliminar el perfil');
     }
   };
 
@@ -423,7 +444,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       let clientId = '';
       const existingClient = clients.find(c => c.phone === clientData.phone);
-      clientId = existingClient ? existingClient.id : await addClient({ name: clientData.name, phone: clientData.phone });
+      if (existingClient) clientId = existingClient.id;
+      else clientId = await addClient({ name: clientData.name, phone: clientData.phone });
 
       await updateProfileMutation.mutateAsync({
         id: profileId,
@@ -450,7 +472,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success(`Perfil vendido a ${clientData.name}`);
       return true;
-    } catch {
+    } catch (error) {
       toast.error('Error al vender el perfil');
       return false;
     }
@@ -487,7 +509,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success('Perfil renovado exitosamente');
       return true;
-    } catch {
+    } catch (error) {
       toast.error('Error al renovar el perfil');
       return false;
     }
@@ -517,8 +539,19 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success(`Cuenta ${account.serviceName} renovada exitosamente`);
       return true;
-    } catch {
+    } catch (error) {
       toast.error('Error al renovar la cuenta');
+      return false;
+    }
+  };
+
+  const updateProfile = async (_accountId: string, profileId: string, updates: Partial<Profile>) => {
+    try {
+      await updateProfileMutation.mutateAsync({ id: profileId, updates });
+      toast.success('Perfil actualizado exitosamente');
+      return true;
+    } catch (error) {
+      toast.error('Error al actualizar el perfil');
       return false;
     }
   };
@@ -527,7 +560,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       await updateSettingsMutation.mutateAsync(updates);
       toast.success('Configuración actualizada');
-    } catch {
+    } catch (error) {
       toast.error('Error al actualizar la configuración');
     }
   };
@@ -561,6 +594,24 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const getMaxProfilesByService = (serviceName: ServiceType) => {
     const service = services.find(s => s.name === serviceName);
     return service?.maxProfiles || 7;
+  };
+
+  const deleteService = async (id: string) => {
+    try {
+      await deleteServiceMutation.mutateAsync(id);
+      toast.success('Servicio eliminado');
+    } catch (error) {
+      toast.error('Error al eliminar el servicio');
+    }
+  };
+
+  const deleteProfile = async (_accountId: string, profileId: string) => {
+    try {
+      await deleteProfileMutation.mutateAsync(profileId);
+      toast.success('Perfil eliminado');
+    } catch (error) {
+      toast.error('Error al eliminar el perfil');
+    }
   };
 
   const sendTelegramTestNotification = async (botToken: string, chatId: string) => {
@@ -723,7 +774,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         renewProfile,
         renewAccount,
         updateProfile,
-        deleteProfile,
         addClient,
         addExpense,
         addService,
@@ -734,6 +784,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         getStats,
         getServiceColor,
         getMaxProfilesByService,
+        deleteProfile,
         sendTelegramTestNotification,
         renewAccountMaster,
         renewProfileSale,
