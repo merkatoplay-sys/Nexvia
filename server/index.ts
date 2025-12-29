@@ -9,6 +9,16 @@ import { createUser } from "./auth";
 const app = express();
 const httpServer = createServer(app);
 
+// ✅ FIX: Evitar 304/ETag en APIs (Railway + fetch/json)
+app.set("etag", false);
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
@@ -55,7 +65,6 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       log(logLine);
     }
   });
@@ -100,7 +109,10 @@ app.use((req, res, next) => {
       "User"
     );
     console.log("✅ Usuario admin creado");
-  } catch {
-    console.log("ℹ️ Usuario admin ya existe");
+  } catch (err) {
+    // OJO: aquí puede fallar por "ya existe" o por otra cosa.
+    console.log("ℹ️ Usuario admin ya existe o no se pudo crear");
+    // Si quieres ver el motivo real, descomenta:
+    // console.error(err);
   }
 })();
