@@ -139,188 +139,198 @@ export default function Sales() {
             </Button>
           </DialogTrigger>
 
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Nueva Venta</DialogTitle>
-            </DialogHeader>
+          {/* ✅ FIX: modal con altura máxima + body scrolleable + footer fijo */}
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg p-0 max-h-[85vh] overflow-hidden flex flex-col">
+            {/* Header fijo */}
+            <div className="px-6 py-4 border-b border-white/10">
+              <DialogHeader>
+                <DialogTitle>Nueva Venta</DialogTitle>
+              </DialogHeader>
+            </div>
 
-            <div className="grid gap-4 py-4">
-              {/* Tipo de venta */}
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Tipo de Venta</label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    className={saleMode === 'perfil'
-                      ? 'bg-primary text-white'
-                      : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'}
-                    onClick={() => setSaleMode('perfil')}
-                  >
-                    Perfil
-                  </Button>
-                  <Button
-                    type="button"
-                    className={saleMode === 'cuenta'
-                      ? 'bg-primary text-white'
-                      : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'}
-                    onClick={() => setSaleMode('cuenta')}
-                  >
-                    Cuenta completa
-                  </Button>
-                </div>
-              </div>
-
-              {/* Servicio */}
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Servicio</label>
-                <Select
-                  value={selectedService}
-                  onValueChange={(v) => {
-                    setSelectedService(v);
-                    setSelectedAccountId('');
-                    setSelectedProfileId('');
-                  }}
-                >
-                  <SelectTrigger className="glass-input">
-                    <SelectValue placeholder="Selecciona un servicio" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-white/10 text-white">
-                    {uniqueServices.map(service => (
-                      <SelectItem key={service} value={service}>{service}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Cuenta */}
-              {!!selectedService && (
+            {/* Body scrolleable */}
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="grid gap-4">
+                {/* Tipo de venta */}
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Cuenta Maestra</label>
-                  <Select value={selectedAccountId} onValueChange={(v) => { setSelectedAccountId(v); setSelectedProfileId(''); }}>
+                  <label className="text-xs text-muted-foreground">Tipo de Venta</label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className={saleMode === 'perfil'
+                        ? 'bg-primary text-white'
+                        : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'}
+                      onClick={() => setSaleMode('perfil')}
+                    >
+                      Perfil
+                    </Button>
+                    <Button
+                      type="button"
+                      className={saleMode === 'cuenta'
+                        ? 'bg-primary text-white'
+                        : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'}
+                      onClick={() => setSaleMode('cuenta')}
+                    >
+                      Cuenta completa
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Servicio */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Servicio</label>
+                  <Select
+                    value={selectedService}
+                    onValueChange={(v) => {
+                      setSelectedService(v);
+                      setSelectedAccountId('');
+                      setSelectedProfileId('');
+                    }}
+                  >
                     <SelectTrigger className="glass-input">
-                      <SelectValue placeholder="Selecciona una cuenta" />
+                      <SelectValue placeholder="Selecciona un servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {filteredAccounts.map((acc: any) => {
-                        const sold = isAccountSold(acc);
-                        const profiles = (acc.profiles ?? []);
-                        const avail = profiles.filter((p: any) => p.status === 'disponible').length;
-
-                        // si vendes PERFIL, necesitas al menos 1 disponible
-                        const disableForProfile = saleMode === 'perfil' && (sold || avail === 0);
-
-                        // si vendes CUENTA, no puedes venderla si ya está vendida
-                        const disableForAccount = saleMode === 'cuenta' && sold;
-
-                        const disabled = disableForProfile || disableForAccount;
-
-                        return (
-                          <SelectItem key={acc.id} value={acc.id} disabled={disabled}>
-                            {acc.email} {sold ? '(Cuenta vendida)' : `(${avail} disponibles)`}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Perfil (solo si es venta por perfil) */}
-              {saleMode === 'perfil' && !!selectedAccountId && (
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Perfil Disponible</label>
-                  <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
-                    <SelectTrigger className="glass-input">
-                      <SelectValue placeholder="Selecciona un perfil" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border-white/10 text-white">
-                      {availableProfiles.map((p: any) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      {uniqueServices.map(service => (
+                        <SelectItem key={service} value={service}>{service}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
 
-              {/* Cliente */}
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Nombre del Cliente</label>
-                <Input
-                  className="glass-input"
-                  placeholder="Juan Pérez"
-                  value={saleData.name}
-                  onChange={e => setSaleData({ ...saleData, name: e.target.value })}
-                />
-              </div>
+                {/* Cuenta */}
+                {!!selectedService && (
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Cuenta Maestra</label>
+                    <Select value={selectedAccountId} onValueChange={(v) => { setSelectedAccountId(v); setSelectedProfileId(''); }}>
+                      <SelectTrigger className="glass-input">
+                        <SelectValue placeholder="Selecciona una cuenta" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-white/10 text-white">
+                        {filteredAccounts.map((acc: any) => {
+                          const sold = isAccountSold(acc);
+                          const profiles = (acc.profiles ?? []);
+                          const avail = profiles.filter((p: any) => p.status === 'disponible').length;
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Teléfono</label>
-                <Input
-                  className="glass-input"
-                  placeholder="+502 5555 5555"
-                  value={saleData.phone}
-                  onChange={e => setSaleData({ ...saleData, phone: e.target.value })}
-                />
-              </div>
+                          // si vendes PERFIL, necesitas al menos 1 disponible
+                          const disableForProfile = saleMode === 'perfil' && (sold || avail === 0);
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">PIN (opcional)</label>
-                <Input
-                  className="glass-input"
-                  placeholder="1234"
-                  value={saleData.pin}
-                  onChange={e => setSaleData({ ...saleData, pin: e.target.value })}
-                />
-              </div>
+                          // si vendes CUENTA, no puedes venderla si ya está vendida
+                          const disableForAccount = saleMode === 'cuenta' && sold;
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Precio ($)</label>
-                <Input
-                  type="number"
-                  className="glass-input"
-                  value={saleData.price}
-                  onChange={e => setSaleData({ ...saleData, price: parseFloat(e.target.value) })}
-                />
-              </div>
+                          const disabled = disableForProfile || disableForAccount;
 
-              <div className="grid grid-cols-2 gap-4">
+                          return (
+                            <SelectItem key={acc.id} value={acc.id} disabled={disabled}>
+                              {acc.email} {sold ? '(Cuenta vendida)' : `(${avail} disponibles)`}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Perfil (solo si es venta por perfil) */}
+                {saleMode === 'perfil' && !!selectedAccountId && (
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Perfil Disponible</label>
+                    <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+                      <SelectTrigger className="glass-input">
+                        <SelectValue placeholder="Selecciona un perfil" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-white/10 text-white">
+                        {availableProfiles.map((p: any) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Cliente */}
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Fecha de Inicio</label>
+                  <label className="text-xs text-muted-foreground">Nombre del Cliente</label>
                   <Input
-                    type="date"
                     className="glass-input"
-                    value={saleData.startDate}
-                    onChange={e => setSaleData({ ...saleData, startDate: e.target.value })}
+                    placeholder="Juan Pérez"
+                    value={saleData.name}
+                    onChange={e => setSaleData({ ...saleData, name: e.target.value })}
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Fecha de Vencimiento</label>
+                  <label className="text-xs text-muted-foreground">Teléfono</label>
                   <Input
-                    type="date"
                     className="glass-input"
-                    value={saleData.endDate}
-                    onChange={e => setSaleData({ ...saleData, endDate: e.target.value })}
+                    placeholder="+502 5555 5555"
+                    value={saleData.phone}
+                    onChange={e => setSaleData({ ...saleData, phone: e.target.value })}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">PIN (opcional)</label>
+                  <Input
+                    className="glass-input"
+                    placeholder="1234"
+                    value={saleData.pin}
+                    onChange={e => setSaleData({ ...saleData, pin: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Precio ($)</label>
+                  <Input
+                    type="number"
+                    className="glass-input"
+                    value={saleData.price}
+                    onChange={e => setSaleData({ ...saleData, price: parseFloat(e.target.value) })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Fecha de Inicio</label>
+                    <Input
+                      type="date"
+                      className="glass-input"
+                      value={saleData.startDate}
+                      onChange={e => setSaleData({ ...saleData, startDate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Fecha de Vencimiento</label>
+                    <Input
+                      type="date"
+                      className="glass-input"
+                      value={saleData.endDate}
+                      onChange={e => setSaleData({ ...saleData, endDate: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsSellDialogOpen(false)}
-                className="border-white/10 hover:bg-white/5 text-white"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleConfirm}
-                className="bg-primary text-white"
-                disabled={!canConfirm}
-              >
-                Confirmar Venta
-              </Button>
-            </DialogFooter>
+            {/* Footer fijo (siempre visible) */}
+            <div className="px-6 py-4 border-t border-white/10 bg-card/95">
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsSellDialogOpen(false)}
+                  className="border-white/10 hover:bg-white/5 text-white"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleConfirm}
+                  className="bg-primary text-white"
+                  disabled={!canConfirm}
+                >
+                  Confirmar Venta
+                </Button>
+              </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
