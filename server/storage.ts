@@ -50,7 +50,7 @@ export interface IStorage {
   getAccounts(userId: string): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account>;
-  deleteAccount(id: string, userId: string): Promise<void>;
+  deleteAccount(id: string, userId: string): Promise<void>; // ARCHIVA
 
   // Profiles
   getProfiles(userId: string): Promise<Profile[]>;
@@ -73,6 +73,7 @@ export interface IStorage {
   // Expenses
   getExpenses(userId: string): Promise<Expense[]>;
   createExpense(expense: InsertExpense): Promise<Expense>;
+  voidExpense(expenseId: string, userId: string, reason?: string): Promise<void>;
 
   // Settings
   getSettings(userId: string): Promise<Settings | null>;
@@ -143,6 +144,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(accounts.serviceName, service.name), eq(accounts.userId, userId)));
 
     for (const account of serviceAccounts) {
+      // ✅ esto ARCHIVA
       await this.deleteAccount(account.id, userId);
     }
 
@@ -154,18 +156,18 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(accounts)
-      .where(eq(accounts.userId, userId))
+      .where(and(eq(accounts.userId, userId), eq(accounts.isArchived, false)))
       .orderBy(desc(accounts.createdAt));
   }
 
   async createAccount(account: InsertAccount): Promise<Account> {
     const payload: any = { ...account };
 
-    // ✅ startDate / expirationDate son NOT NULL -> fallback si vienen mal
-    if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate) ?? new Date();
-    if ("expirationDate" in payload) payload.expirationDate = toDateOrNull(payload.expirationDate) ?? new Date();
+    // startDate / expirationDate NOT NULL -> fallback
+    payload.startDate = toDateOrNull(payload.startDate) ?? new Date();
+    payload.expirationDate = toDateOrNull(payload.expirationDate) ?? new Date();
 
-    // Campos opcionales nuevos
+    // opcionales
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
@@ -176,7 +178,7 @@ export class DatabaseStorage implements IStorage {
   async updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account> {
     const payload: any = { ...updates };
 
-    // ✅ no seteamos null en NOT NULL; si viene inválido, lo quitamos
+    // NOT NULL: si viene inválido, lo omitimos
     if ("startDate" in payload) {
       const d = toDateOrNull(payload.startDate);
       if (d) payload.startDate = d;
@@ -188,7 +190,7 @@ export class DatabaseStorage implements IStorage {
       else delete payload.expirationDate;
     }
 
-    // ✅ opcionales
+    // opcionales
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
@@ -201,20 +203,29 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  // ✅ Opción 1: ARCHIVAR (no borrar finanzas, no borrar perfiles)
   async deleteAccount(id: string, userId: string): Promise<void> {
-    // ✅ IMPORTANTE: NO BORRAR expenses (para no restar tu contabilidad)
-    // Solo borramos perfiles y cuenta. Los movimientos financieros quedan registrados.
-
-    await db.delete(profiles).where(eq(profiles.accountId, id));
-    await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
+    await db
+      .update(accounts)
+      .set({ isArchived: true, archivedAt: new Date() })
+      .where(and(eq(accounts.id, id), eq(accounts.userId, userId)));
   }
 
   // Profiles
   async getProfiles(userId: string): Promise<Profile[]> {
+    // ✅ solo perfiles de cuentas NO archivadas
+    const activeAccounts = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(and(eq(accounts.userId, userId), eq(accounts.isArchived, false)));
+
+    const ids = activeAccounts.map(a => a.id);
+    if (ids.length === 0) return [];
+
     return await db
       .select()
       .from(profiles)
-      .where(eq(profiles.userId, userId))
+      .where(and(eq(profiles.userId, userId), inArray(profiles.accountId, ids)))
       .orderBy(desc(profiles.createdAt));
   }
 
@@ -242,7 +253,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProfile(id: string, userId: string): Promise<void> {
-    // ✅ Igual: NO borramos expenses (para no restar contabilidad)
+    // ✅ no borrar expenses (se conservan)
     await db.delete(profiles).where(and(eq(profiles.id, id), eq(profiles.userId, userId)));
   }
 
@@ -272,6 +283,7 @@ export class DatabaseStorage implements IStorage {
       throw new Error("No puedes mover perfiles entre servicios distintos");
     }
 
+    // ✅ solo mover perfiles activos
     const profilesToMove = await db
       .select()
       .from(profiles)
@@ -280,7 +292,7 @@ export class DatabaseStorage implements IStorage {
           eq(profiles.userId, userId),
           eq(profiles.accountId, fromAccountId),
           inArray(profiles.id, profileIds),
-          eq(profiles.status, "activo"),
+          eq(profiles.status, "activo")
         )
       )
       .orderBy(desc(profiles.createdAt));
@@ -294,7 +306,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(profiles.userId, userId),
           eq(profiles.accountId, toAccountId),
-          eq(profiles.status, "disponible"),
+          eq(profiles.status, "disponible")
         )
       )
       .orderBy(desc(profiles.createdAt));
@@ -370,11 +382,21 @@ export class DatabaseStorage implements IStorage {
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
     const payload: any = { ...expense };
-    if ("date" in payload) payload.date = toDateOrNull(payload.date) ?? new Date();
-    else payload.date = new Date();
+    payload.date = toDateOrNull(payload.date) ?? new Date();
 
     const [newExpense] = await db.insert(expenses).values(payload).returning();
     return newExpense;
+  }
+
+  async voidExpense(expenseId: string, userId: string, reason?: string): Promise<void> {
+    await db
+      .update(expenses)
+      .set({
+        isVoided: true,
+        voidedAt: new Date(),
+        voidReason: reason ?? null,
+      })
+      .where(and(eq(expenses.id, expenseId), eq(expenses.userId, userId)));
   }
 
   // Settings

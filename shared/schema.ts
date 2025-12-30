@@ -32,18 +32,21 @@ export const accounts = pgTable("accounts", {
   isRenewable: boolean("is_renewable").notNull().default(true),
   cost: real("cost").notNull(),
 
-  // ⚠️ lo dejamos por compatibilidad (puedes no usarlo en UI)
+  // compatibilidad
   pricePerProfile: real("price_per_profile").notNull().default(0),
 
   status: varchar("status", { length: 20 }).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 
-  // ✅ NUEVO: venta cuenta completa
-  // "perfiles" | "cuenta"
-  saleType: varchar("sale_type", { length: 20 }).notNull().default("perfiles"),
+  // venta cuenta completa
+  saleType: varchar("sale_type", { length: 20 }).notNull().default("perfiles"), // "perfiles" | "cuenta"
   soldClientId: varchar("sold_client_id"),
   soldStartDate: timestamp("sold_start_date"),
   soldEndDate: timestamp("sold_end_date"),
+
+  // ✅ Opción 1: archivado
+  isArchived: boolean("is_archived").notNull().default(false),
+  archivedAt: timestamp("archived_at"),
 });
 
 // Profiles table
@@ -78,13 +81,18 @@ export const expenses = pgTable("expenses", {
   userId: varchar("user_id").notNull(),
   description: text("description").notNull(),
   amount: real("amount").notNull(),
-  type: varchar("type", { length: 20 }).notNull(),
+  type: varchar("type", { length: 20 }).notNull(), // ganancia | gasto | ajuste
   profileId: varchar("profile_id"),
   accountId: varchar("account_id"),
   note: text("note"),
   reference: text("reference"),
   date: timestamp("date").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+
+  // ✅ Anular movimiento sin borrarlo
+  isVoided: boolean("is_voided").notNull().default(false),
+  voidedAt: timestamp("voided_at"),
+  voidReason: text("void_reason"),
 });
 
 // Settings table
@@ -121,49 +129,27 @@ export const insertServiceSchema = createInsertSchema(services).omit({
   createdAt: true,
 });
 
-/**
- * ✅ IMPORTANTE:
- * Hacemos opcional saleType y las fechas/cliente de venta
- * para que NO te obligue el frontend al crear cuenta.
- */
-export const insertAccountSchema = createInsertSchema(accounts)
-  .omit({
-    id: true,
-    createdAt: true,
-  })
-  .extend({
-    saleType: z.enum(["perfiles", "cuenta"]).optional(),
-    soldClientId: z.string().optional().nullable(),
-    soldStartDate: z.coerce.date().optional().nullable(),
-    soldEndDate: z.coerce.date().optional().nullable(),
-  });
+export const insertAccountSchema = createInsertSchema(accounts).omit({
+  id: true,
+  createdAt: true,
+  archivedAt: true,
+});
 
-/**
- * ✅ Fechas opcionales en perfiles (por si llegan como string ISO)
- */
-export const insertProfileSchema = createInsertSchema(profiles)
-  .omit({
-    id: true,
-    createdAt: true,
-  })
-  .extend({
-    startDate: z.coerce.date().optional().nullable(),
-    endDate: z.coerce.date().optional().nullable(),
-  });
+export const insertProfileSchema = createInsertSchema(profiles).omit({
+  id: true,
+  createdAt: true,
+});
 
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   createdAt: true,
 });
 
-export const insertExpenseSchema = createInsertSchema(expenses)
-  .omit({
-    id: true,
-    createdAt: true,
-  })
-  .extend({
-    date: z.coerce.date(), // ✅ muy importante para expenses
-  });
+export const insertExpenseSchema = createInsertSchema(expenses).omit({
+  id: true,
+  createdAt: true,
+  voidedAt: true,
+});
 
 export const insertSettingsSchema = createInsertSchema(settings).omit({
   id: true,

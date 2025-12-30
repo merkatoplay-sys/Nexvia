@@ -230,13 +230,14 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Crear cuenta: convierte fechas y registra GASTO por cost
+  // Crear cuenta: registra gasto por cost
   app.post("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
 
       const startDate = toDate(req.body?.startDate) ?? new Date();
-      const expirationDate = toDate(req.body?.expirationDate) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const expirationDate =
+        toDate(req.body?.expirationDate) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       const account = await storage.createAccount({
         ...req.body,
@@ -245,7 +246,6 @@ export async function registerRoutes(
         expirationDate,
       } as any);
 
-      // ✅ Registrar el costo como GASTO (SOLO backend)
       const cost = Number(req.body?.cost ?? 0);
       if (cost > 0) {
         await storage.createExpense({
@@ -268,7 +268,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Update cuenta: convierte fechas si vienen
+  // Update cuenta
   app.patch("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -287,7 +287,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Vender CUENTA COMPLETA
+  // Vender CUENTA COMPLETA
   app.post("/api/accounts/:id/sell", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -355,14 +355,15 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ DELETE cuenta = ARCHIVAR
   app.delete("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       await storage.deleteAccount(req.params.id, userId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting account:", error);
-      res.status(500).json({ message: "Failed to delete account" });
+      console.error("Error deleting(account archive):", error);
+      res.status(500).json({ message: "Failed to archive account" });
     }
   });
 
@@ -378,7 +379,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ mover perfiles
+  // mover perfiles
   app.post("/api/profiles/move", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -400,7 +401,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Create profile
+  // Create profile
   app.post("/api/profiles", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -417,7 +418,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Update profile (fix timestamps)
+  // Update profile
   app.patch("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -491,6 +492,20 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error creating expense:", error);
       res.status(500).json({ message: "Failed to create expense" });
+    }
+  });
+
+  // ✅ NUEVO: anular movimiento
+  app.patch("/api/expenses/:id/void", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const reason = String(req.body?.reason ?? "").trim();
+
+      await storage.voidExpense(req.params.id, userId, reason || undefined);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error voiding expense:", error);
+      res.status(500).json({ message: error?.message || "Failed to void expense" });
     }
   });
 

@@ -43,7 +43,7 @@ export interface Account {
   expirationDate: string;
   isRenewable: boolean;
   cost: number;
-  pricePerProfile: number; // compatibilidad
+  pricePerProfile: number;
 
   status: 'activa' | 'por vencer' | 'vencida';
   createdAt?: Date;
@@ -53,6 +53,10 @@ export interface Account {
   soldClientId?: string | null;
   soldStartDate?: string | null;
   soldEndDate?: string | null;
+
+  // opcional (backend lo tiene)
+  isArchived?: boolean;
+  archivedAt?: string | null;
 }
 
 export interface Client {
@@ -76,6 +80,11 @@ export interface Expense {
   note?: string | null;
   reference?: string | null;
   createdAt?: Date;
+
+  // ✅ anulación
+  isVoided?: boolean;
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 export interface AppSettings {
@@ -124,6 +133,9 @@ interface StreamingContextType {
 
   addClient: (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => Promise<string>;
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
+
+  // ✅ nuevo: anular movimiento
+  voidExpense: (expenseId: string, reason?: string) => Promise<boolean>;
 
   addService: (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => Promise<Service | null>;
   updateService: (id: string, updates: Partial<Service>) => Promise<boolean>;
@@ -237,7 +249,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
     },
   });
 
@@ -276,6 +287,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
     },
   });
 
@@ -298,12 +310,18 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
   });
 
+  const voidExpenseMutation = useMutation({
+    mutationFn: ({ expenseId, reason }: { expenseId: string; reason?: string }) =>
+      fetchAPI(`/api/expenses/${expenseId}/void`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
+  });
+
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: any) => fetchAPI('/api/settings', { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/settings'] }),
   });
 
-  // ✅ Crear cuenta: NO registra gasto aquí (ya lo hace el backend)
+  // Crear cuenta (gasto lo hace backend)
   const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
     const service = services.find(s => s.name === newAccount.serviceName);
     const maxProfiles = service?.maxProfiles || 7;
@@ -353,12 +371,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // ✅ ahora “eliminar” = archivar
   const deleteAccount = async (id: string) => {
     try {
       await deleteAccountMutation.mutateAsync(id);
-      toast.success('Cuenta eliminada (tus transacciones se conservan)');
+      toast.success('Cuenta archivada (tus transacciones se conservan)');
     } catch {
-      toast.error('Error al eliminar la cuenta');
+      toast.error('Error al archivar la cuenta');
     }
   };
 
@@ -377,6 +396,17 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await createExpenseMutation.mutateAsync(expense);
     } catch {
       toast.error('Error al registrar transacción');
+    }
+  };
+
+  const voidExpense = async (expenseId: string, reason?: string) => {
+    try {
+      await voidExpenseMutation.mutateAsync({ expenseId, reason });
+      toast.success('Movimiento anulado');
+      return true;
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al anular movimiento');
+      return false;
     }
   };
 
@@ -455,10 +485,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     data: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
   ) => {
     try {
-      await fetchAPI(`/api/accounts/${accountId}/sell`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      await fetchAPI(`/api/accounts/${accountId}/sell`, { method: 'POST', body: JSON.stringify(data) });
 
       await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
@@ -585,8 +612,10 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     });
 
   const getStats = () => {
-    const totalSales = expenses.filter(e => e.type === 'ganancia').reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses = expenses.filter(e => e.type === 'gasto').reduce((sum, e) => sum + e.amount, 0);
+    const valid = expenses.filter(e => !e.isVoided);
+
+    const totalSales = valid.filter(e => e.type === 'ganancia').reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses = valid.filter(e => e.type === 'gasto').reduce((sum, e) => sum + e.amount, 0);
     const netProfit = totalSales - totalExpenses;
 
     const activeAccounts = accounts.filter(a => a.status === 'activa').length;
@@ -790,6 +819,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         updateProfile,
         addClient,
         addExpense,
+        voidExpense,
         addService,
         updateService,
         deleteService,
