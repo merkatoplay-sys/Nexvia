@@ -20,6 +20,7 @@ type ProfileLike = {
   clientId?: string | null;
   phone?: string | null;
   price?: number | null;
+  __placeholder?: boolean;
 };
 
 export default function Accounts() {
@@ -137,13 +138,18 @@ export default function Accounts() {
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
 
-  // ✅ helper: enviar a ventas con preselección
-  const goToSell = (serviceName: string, accountId: string, profileId?: string) => {
+  // ✅ helper: mandar a ventas con query
+  const goSellFromSlot = (serviceName: string, accountId: string, profile?: ProfileLike) => {
     const params = new URLSearchParams();
     params.set('mode', 'perfil');
     params.set('service', serviceName);
     params.set('accountId', accountId);
-    if (profileId) params.set('profileId', profileId);
+
+    // SOLO mandamos profileId si es REAL, no placeholder
+    if (profile && !profile.__placeholder && profile.status === 'disponible') {
+      params.set('profileId', profile.id);
+    }
+
     navigate(`/sales?${params.toString()}`);
   };
 
@@ -226,7 +232,6 @@ export default function Accounts() {
                 />
               </div>
 
-              {/* ✅ costo + renovable */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Costo ($)</label>
@@ -324,7 +329,7 @@ export default function Accounts() {
             const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
             const totalSlots = Number(account.totalProfiles || 0);
 
-            // ✅ placeholders
+            // ✅ placeholders SIEMPRE
             const displayProfiles: ProfileLike[] = Array.from({ length: totalSlots }, (_, idx) => {
               const p = realProfiles[idx];
               return (
@@ -332,6 +337,7 @@ export default function Accounts() {
                   id: `placeholder-${account.id}-${idx}`,
                   name: 'Disponible',
                   status: 'disponible',
+                  __placeholder: true,
                 }
               );
             });
@@ -345,7 +351,7 @@ export default function Accounts() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card className="glass-card overflow-hidden group hover:border-primary/30 transition-all duration-300" data-testid={`card-account-${account.id}`}>
+                <Card className="glass-card overflow-hidden group hover:border-primary/30 transition-all duration-300">
                   <CardHeader className="bg-white/5 border-b border-white/5 pb-3">
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex items-center gap-3 min-w-0">
@@ -412,7 +418,6 @@ export default function Accounts() {
                             variant="ghost"
                             onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.serviceName, email: account.email })}
                             className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
-                            data-testid={`button-delete-account-${account.id}`}
                             title="Eliminar"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -440,13 +445,12 @@ export default function Accounts() {
                       {displayProfiles.map((profile) => (
                         <div
                           key={profile.id}
-                          className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm group/profile cursor-pointer"
+                          className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm cursor-pointer"
                           onClick={(e) => {
-                            // ✅ Evita navegación accidental / bubbling
-                            e.preventDefault();
-                            e.stopPropagation();
+                            // ✅ evita navegación accidental por Link/anchor
+                            e.preventDefault?.();
+                            e.stopPropagation?.();
 
-                            // ✅ Activo => editar
                             if (profile.status === 'activo') {
                               setEditingProfile({ accountId: account.id, profile });
                               setEditData({
@@ -459,10 +463,12 @@ export default function Accounts() {
                               return;
                             }
 
-                            // ✅ Disponible => ir a venta
-                            const isPlaceholder = String(profile.id).startsWith('placeholder-');
-                            goToSell(account.serviceName, account.id, isPlaceholder ? undefined : profile.id);
+                            // ✅ slot disponible -> ir a ventas
+                            if (profile.status === 'disponible') {
+                              goSellFromSlot(account.serviceName, account.id, profile);
+                            }
                           }}
+                          title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <User className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -475,8 +481,12 @@ export default function Accounts() {
                             <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
                               Activo
                             </Badge>
+                          ) : profile.status === 'vencido' ? (
+                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
+                              Vencido
+                            </Badge>
                           ) : (
-                            <span className="text-[10px] text-primary">Vender</span>
+                            <span className="text-[10px] text-muted-foreground">Disponible</span>
                           )}
                         </div>
                       ))}
