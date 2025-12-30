@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Plus, ShoppingCart, CheckCircle } from 'lucide-react';
+import { Plus, ShoppingCart } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import { format, addDays, isAfter } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -35,7 +35,7 @@ export default function Sales() {
     endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
   });
 
-  // ✅ Leer query params para abrir modal desde Accounts
+  // ✅ Leer query params para abrir modal desde Accounts (opcional)
   useEffect(() => {
     const url = new URL(window.location.href);
     const mode = (url.searchParams.get('mode') as SaleMode | null) ?? null;
@@ -43,19 +43,16 @@ export default function Sales() {
     const accountId = url.searchParams.get('accountId') ?? '';
     const profileId = url.searchParams.get('profileId') ?? '';
 
-    // si no hay nada, no hacemos nada
     if (!service && !accountId && !profileId) return;
 
     if (mode === 'cuenta' || mode === 'perfil') setSaleMode(mode);
     if (service) setSelectedService(service);
 
-    // esperar a que existan accounts para validar accountId
     if (accountId) {
       const exists = accountsSafe.some(a => a.id === accountId);
       if (exists) setSelectedAccountId(accountId);
     }
 
-    // profileId es opcional (si venía de placeholder no viene)
     if (profileId) setSelectedProfileId(profileId);
 
     setIsSellDialogOpen(true);
@@ -81,7 +78,8 @@ export default function Sales() {
     return isAfter(soldEnd, new Date());
   };
 
-  const selectedAccountProfiles = (selectedAccount?.profiles ?? []);
+  // Solo perfiles reales del account seleccionado (modal)
+  const selectedAccountProfiles = (selectedAccount?.profiles ?? []) as any[];
   const availableProfiles = selectedAccountProfiles.filter((p: any) => p.status === 'disponible');
 
   const canConfirm =
@@ -93,6 +91,22 @@ export default function Sales() {
     !!saleData.startDate &&
     !!saleData.endDate &&
     (saleMode === 'cuenta' ? true : !!selectedProfileId);
+
+  const resetForm = () => {
+    setIsSellDialogOpen(false);
+    setSelectedAccountId('');
+    setSelectedProfileId('');
+    setSelectedService('');
+    setSaleMode('perfil');
+    setSaleData({
+      name: '',
+      phone: '',
+      pin: '',
+      price: 0,
+      startDate: format(new Date(), 'yyyy-MM-dd'),
+      endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+    });
+  };
 
   const handleConfirm = async () => {
     if (!canConfirm) return;
@@ -107,20 +121,7 @@ export default function Sales() {
         endDate: saleData.endDate + 'T00:00:00Z',
       });
 
-      if (ok) {
-        setIsSellDialogOpen(false);
-        setSelectedAccountId('');
-        setSelectedProfileId('');
-        setSelectedService('');
-        setSaleData({
-          name: '',
-          phone: '',
-          pin: '',
-          price: 0,
-          startDate: format(new Date(), 'yyyy-MM-dd'),
-          endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-        });
-      }
+      if (ok) resetForm();
       return;
     }
 
@@ -133,21 +134,7 @@ export default function Sales() {
       endDate: saleData.endDate + 'T00:00:00Z',
     });
 
-    if (ok) {
-      setIsSellDialogOpen(false);
-      setSelectedAccountId('');
-      setSelectedProfileId('');
-      setSelectedService('');
-      setSaleMode('perfil');
-      setSaleData({
-        name: '',
-        phone: '',
-        pin: '',
-        price: 0,
-        startDate: format(new Date(), 'yyyy-MM-dd'),
-        endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-      });
-    }
+    if (ok) resetForm();
   };
 
   return (
@@ -176,19 +163,29 @@ export default function Sales() {
                 <div className="flex gap-2">
                   <Button
                     type="button"
-                    className={saleMode === 'perfil'
-                      ? 'bg-primary text-white'
-                      : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'}
-                    onClick={() => setSaleMode('perfil')}
+                    className={
+                      saleMode === 'perfil'
+                        ? 'bg-primary text-white'
+                        : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                    }
+                    onClick={() => {
+                      setSaleMode('perfil');
+                      setSelectedProfileId('');
+                    }}
                   >
                     Perfil
                   </Button>
                   <Button
                     type="button"
-                    className={saleMode === 'cuenta'
-                      ? 'bg-primary text-white'
-                      : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'}
-                    onClick={() => setSaleMode('cuenta')}
+                    className={
+                      saleMode === 'cuenta'
+                        ? 'bg-primary text-white'
+                        : 'bg-white/5 border border-white/10 text-white hover:bg-white/10'
+                    }
+                    onClick={() => {
+                      setSaleMode('cuenta');
+                      setSelectedProfileId('');
+                    }}
                   >
                     Cuenta completa
                   </Button>
@@ -210,7 +207,9 @@ export default function Sales() {
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
                     {uniqueServices.map(service => (
-                      <SelectItem key={service} value={service}>{service}</SelectItem>
+                      <SelectItem key={service} value={service}>
+                        {service}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -219,14 +218,20 @@ export default function Sales() {
               {!!selectedService && (
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Cuenta Maestra</label>
-                  <Select value={selectedAccountId} onValueChange={(v) => { setSelectedAccountId(v); setSelectedProfileId(''); }}>
+                  <Select
+                    value={selectedAccountId}
+                    onValueChange={(v) => {
+                      setSelectedAccountId(v);
+                      setSelectedProfileId('');
+                    }}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Selecciona una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {filteredAccounts.map((acc: any) => {
                         const sold = isAccountSold(acc);
-                        const profiles = (acc.profiles ?? []);
+                        const profiles = (acc.profiles ?? []) as any[];
                         const avail = profiles.filter((p: any) => p.status === 'disponible').length;
 
                         const disableForProfile = saleMode === 'perfil' && (sold || avail === 0);
@@ -253,10 +258,15 @@ export default function Sales() {
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {availableProfiles.map((p: any) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Tip: También puedes darle click a un slot en la lista de abajo para abrir este modal.
+                  </p>
                 </div>
               )}
 
@@ -296,7 +306,7 @@ export default function Sales() {
                   type="number"
                   className="glass-input"
                   value={saleData.price}
-                  onChange={e => setSaleData({ ...saleData, price: parseFloat(e.target.value) })}
+                  onChange={e => setSaleData({ ...saleData, price: parseFloat(e.target.value || '0') })}
                 />
               </div>
 
@@ -342,15 +352,31 @@ export default function Sales() {
         </Dialog>
       </div>
 
-      {/* resto tu UI igual */}
+      {/* ✅ Cards con slots SIEMPRE visibles */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredAccounts.map((account: any) => {
-          const profiles = (account.profiles ?? []);
-          const activeProfiles = profiles.filter((p: any) => p.status === 'activo').length;
-          const availableCount = profiles.filter((p: any) => p.status === 'disponible').length;
+          const realProfiles = (account.profiles ?? []) as any[];
+          const totalSlots = Number(account.totalProfiles || 0);
+
+          // ✅ placeholders para mostrar SIEMPRE el total de slots
+          const displayProfiles = Array.from({ length: totalSlots }, (_, idx) => {
+            const p = realProfiles[idx];
+            return (
+              p ?? {
+                id: `placeholder-${account.id}-${idx}`,
+                name: 'Disponible',
+                status: 'disponible',
+                __placeholder: true,
+              }
+            );
+          });
 
           const sold = isAccountSold(account);
           const soldClient = sold ? clientsSafe.find((c: any) => c.id === account.soldClientId) : null;
+
+          // para escoger un perfil real disponible si existe
+          const realAvailable = realProfiles.filter((p: any) => p.status === 'disponible');
+          const availableCount = displayProfiles.filter((p: any) => p.status === 'disponible').length;
 
           return (
             <motion.div
@@ -371,14 +397,67 @@ export default function Sales() {
                         </p>
                       )}
                     </div>
+
                     <div className={`text-right text-sm font-bold ${availableCount > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {availableCount}/{account.totalProfiles}
+                      {availableCount}/{totalSlots}
                     </div>
                   </div>
                 </CardHeader>
 
-                <CardContent className="pt-4">
-                  {/* ... tu contenido */}
+                <CardContent className="pt-4 space-y-3">
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Slots</h4>
+
+                    {displayProfiles.map((p: any) => {
+                      const clickable = !sold; // si está vendida, no abrir modal
+
+                      return (
+                        <div
+                          key={p.id}
+                          className={`flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm
+                            ${clickable ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
+                          onClick={() => {
+                            if (!clickable) return;
+
+                            // Abrir modal de venta perfil por click en slot
+                            setSaleMode('perfil');
+                            setSelectedService(account.serviceName);
+                            setSelectedAccountId(account.id);
+
+                            // si es un perfil real disponible -> setear id
+                            // si es placeholder -> si existe algún real disponible, usa el primero
+                            if (p.status === 'disponible') {
+                              const idToUse = p.__placeholder ? (realAvailable[0]?.id ?? '') : p.id;
+                              setSelectedProfileId(idToUse);
+                            } else {
+                              setSelectedProfileId('');
+                            }
+
+                            setIsSellDialogOpen(true);
+                          }}
+                          title={sold ? 'Cuenta vendida' : 'Click para vender'}
+                        >
+                          <span className={`truncate ${p.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                            {p.name}
+                          </span>
+
+                          {p.status === 'activo' ? (
+                            <span className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                              Activo
+                            </span>
+                          ) : p.status === 'vencido' ? (
+                            <span className="text-[10px] px-2 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/25">
+                              Vencido
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">Disponible</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Botones opcionales */}
                   {!sold && availableCount > 0 && (
                     <Button
                       className="w-full bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
@@ -386,7 +465,7 @@ export default function Sales() {
                         setSaleMode('perfil');
                         setSelectedService(account.serviceName);
                         setSelectedAccountId(account.id);
-                        setSelectedProfileId('');
+                        setSelectedProfileId(realAvailable[0]?.id ?? '');
                         setIsSellDialogOpen(true);
                       }}
                     >
@@ -397,7 +476,7 @@ export default function Sales() {
 
                   {!sold && (
                     <Button
-                      className="w-full mt-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white"
+                      className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white"
                       onClick={() => {
                         setSaleMode('cuenta');
                         setSelectedService(account.serviceName);
@@ -412,7 +491,7 @@ export default function Sales() {
                   )}
 
                   {sold && (
-                    <div className="w-full mt-2 text-center text-xs text-muted-foreground">
+                    <div className="w-full text-center text-xs text-muted-foreground">
                       Esta cuenta está vendida, perfiles bloqueados.
                     </div>
                   )}
