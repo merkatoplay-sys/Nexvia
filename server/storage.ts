@@ -423,16 +423,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSettings(userId: string, updates: Partial<Settings>): Promise<Settings> {
+    // ✅ Blindaje: la app trabaja solo en USD (ignora cualquier otra moneda entrante)
+    const safeUpdates: Partial<Settings> = {
+      ...updates,
+      defaultCurrency: "USD",
+      updatedAt: new Date(),
+    };
+
     const [updated] = await db
       .update(settings)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(safeUpdates as any)
       .where(eq(settings.userId, userId))
       .returning();
 
     if (!updated) {
       const [newSettings] = await db
         .insert(settings)
-        .values({ ...updates, userId } as any)
+        .values({ ...safeUpdates, userId } as any)
         .returning();
       return newSettings;
     }

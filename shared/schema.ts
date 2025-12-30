@@ -99,7 +99,10 @@ export const expenses = pgTable("expenses", {
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
+
+  // ✅ Moneda fija: USD (dejamos columna por compatibilidad futura, pero la app la bloquea a USD)
   defaultCurrency: varchar("default_currency", { length: 3 }).notNull().default("USD"),
+
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
   notificationChannel: varchar("notification_channel", { length: 20 }).notNull().default("telegram"),
   daysBeforeExpiry: integer("days_before_expiry").notNull().default(3),
@@ -151,11 +154,16 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   voidedAt: true,
 });
 
-export const insertSettingsSchema = createInsertSchema(settings).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+// ✅ Settings: forzar USD en validación para evitar guardar otras monedas
+export const insertSettingsSchema = createInsertSchema(settings)
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    defaultCurrency: z.literal("USD").default("USD"),
+  });
 
 // Types
 export type Service = typeof services.$inferSelect;

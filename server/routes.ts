@@ -521,10 +521,17 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ PATCH settings: moneda fija USD (ignora cualquier moneda entrante)
   app.patch("/api/settings", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const settings = await storage.updateSettings(userId, req.body);
+
+      const payload = {
+        ...req.body,
+        defaultCurrency: "USD",
+      };
+
+      const settings = await storage.updateSettings(userId, payload);
       res.json(settings);
     } catch (error) {
       console.error("Error updating settings:", error);

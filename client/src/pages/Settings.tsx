@@ -16,7 +16,12 @@ export default function Settings() {
 
   useEffect(() => {
     if (settings) {
-      setLocalSettings(settings);
+      // ✅ Forzar USD en UI para evitar confusión si existía otra moneda guardada
+      const normalized = {
+        ...settings,
+        defaultCurrency: 'USD',
+      };
+      setLocalSettings(normalized);
     }
   }, [settings]);
 
@@ -66,13 +71,14 @@ export default function Settings() {
     setSendingTest(false);
   };
 
+  // ✅ Moneda fija: USD
   const handleSaveCurrency = () => {
-    updateSettings({ defaultCurrency: localSettings.defaultCurrency });
-    toast.success('Moneda actualizada');
+    updateSettings({ defaultCurrency: 'USD' });
+    toast.success('Moneda configurada: USD');
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="space-y-8"
@@ -97,7 +103,7 @@ export default function Settings() {
               </div>
               <Switch
                 checked={localSettings.notificationsEnabled}
-                onCheckedChange={checked => 
+                onCheckedChange={checked =>
                   setLocalSettings({ ...localSettings, notificationsEnabled: checked })
                 }
                 data-testid="switch-notifications"
@@ -109,9 +115,9 @@ export default function Settings() {
             <>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Canal de notificación</label>
-                <Select 
+                <Select
                   value={localSettings.notificationChannel}
-                  onValueChange={channel => 
+                  onValueChange={channel =>
                     setLocalSettings({ ...localSettings, notificationChannel: channel as 'whatsapp' | 'telegram' })
                   }
                 >
@@ -127,9 +133,9 @@ export default function Settings() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Avisar con anticipación</label>
-                <Select 
+                <Select
                   value={localSettings.daysBeforeExpiry.toString()}
-                  onValueChange={days => 
+                  onValueChange={days =>
                     setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })
                   }
                 >
@@ -150,7 +156,7 @@ export default function Settings() {
                   type="time"
                   className="glass-input"
                   value={localSettings.notificationTime}
-                  onChange={e => 
+                  onChange={e =>
                     setLocalSettings({ ...localSettings, notificationTime: e.target.value })
                   }
                   data-testid="input-notification-time"
@@ -162,9 +168,11 @@ export default function Settings() {
                 <div className="space-y-4 border-t border-white/10 pt-4">
                   <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
                     <p className="text-sm text-blue-200 mb-2"><strong>Configuración de Telegram</strong></p>
-                    <p className="text-xs text-blue-200/80">Necesitas un bot de Telegram. <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">Crea uno aquí</a></p>
+                    <p className="text-xs text-blue-200/80">
+                      Necesitas un bot de Telegram. <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">Crea uno aquí</a>
+                    </p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white">Token del Bot</label>
                     <Input
@@ -172,7 +180,7 @@ export default function Settings() {
                       placeholder="123456:ABCDEFGHijklmnopqrstuvwxyz-1234567890"
                       className="glass-input"
                       value={localSettings.telegramBotToken || ''}
-                      onChange={e => 
+                      onChange={e =>
                         setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })
                       }
                       data-testid="input-telegram-token"
@@ -186,7 +194,7 @@ export default function Settings() {
                       placeholder="123456789 o -100123456789"
                       className="glass-input"
                       value={localSettings.telegramChatId || ''}
-                      onChange={e => 
+                      onChange={e =>
                         setLocalSettings({ ...localSettings, telegramChatId: e.target.value })
                       }
                       data-testid="input-telegram-chatid"
@@ -194,7 +202,7 @@ export default function Settings() {
                     <p className="text-xs text-muted-foreground">Inicia una conversación con tu bot y envía /start para obtener tu Chat ID</p>
                   </div>
 
-                  <Button 
+                  <Button
                     onClick={handleSendTestTelegram}
                     disabled={sendingTest}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white h-9 text-sm"
@@ -212,7 +220,7 @@ export default function Settings() {
                     <p className="text-sm text-green-200 mb-2"><strong>Configuración de WhatsApp</strong></p>
                     <p className="text-xs text-green-200/80">Integración en desarrollo. Pronto podrás conectar WhatsApp Business API para notificaciones automáticas.</p>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-white">Número de WhatsApp</label>
                     <Input
@@ -220,7 +228,7 @@ export default function Settings() {
                       placeholder="+34 123 45 67 89"
                       className="glass-input bg-white/5"
                       value={localSettings.whatsappPhoneNumber || ''}
-                      onChange={e => 
+                      onChange={e =>
                         setLocalSettings({ ...localSettings, whatsappPhoneNumber: e.target.value })
                       }
                       disabled
@@ -239,7 +247,7 @@ export default function Settings() {
             </>
           )}
 
-          <Button 
+          <Button
             onClick={handleSaveNotifications}
             className="bg-primary hover:bg-primary/90 text-white w-full"
             data-testid="button-save-notifications"
@@ -256,39 +264,25 @@ export default function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* ✅ Moneda fija en USD (sin selector) */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Moneda por defecto</label>
-            <Select 
-              value={localSettings.defaultCurrency}
-              onValueChange={currency => 
-                setLocalSettings({ ...localSettings, defaultCurrency: currency })
-              }
-            >
-              <SelectTrigger className="glass-input" data-testid="select-currency">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-white/10 text-white">
-                <SelectItem value="USD">USD - Dólar Estadounidense</SelectItem>
-                <SelectItem value="EUR">EUR - Euro</SelectItem>
-                <SelectItem value="MXN">MXN - Peso Mexicano</SelectItem>
-                <SelectItem value="ARS">ARS - Peso Argentino</SelectItem>
-                <SelectItem value="COP">COP - Peso Colombiano</SelectItem>
-                <SelectItem value="GTQ">GTQ - Quetzales (Guatemala)</SelectItem>
-                <SelectItem value="CLP">CLP - Peso Chileno</SelectItem>
-                <SelectItem value="PEN">PEN - Sol (Perú)</SelectItem>
-                <SelectItem value="BOB">BOB - Boliviano</SelectItem>
-                <SelectItem value="VES">VES - Bolívar (Venezuela)</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="glass-input flex items-center justify-between px-3 py-2">
+              <span className="text-white font-medium">USD</span>
+              <span className="text-xs text-muted-foreground">Fijo</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Actualmente el sistema trabaja solo en <strong>USD</strong> para evitar confusión.
+            </p>
           </div>
 
           <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg">
             <p className="text-sm text-primary">
-              Moneda seleccionada: <strong>{localSettings.defaultCurrency}</strong>
+              Moneda seleccionada: <strong>USD</strong>
             </p>
           </div>
 
-          <Button 
+          <Button
             onClick={handleSaveCurrency}
             className="bg-primary hover:bg-primary/90 text-white w-full"
             data-testid="button-save-currency"
