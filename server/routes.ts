@@ -230,6 +230,18 @@ export async function registerRoutes(
     }
   });
 
+  // ✅✅✅ NUEVO: Backfill de slots (crea perfiles disponibles faltantes)
+  app.post("/api/accounts/backfill-slots", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await storage.backfillAccountSlots(userId);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error backfilling slots:", error);
+      res.status(500).json({ message: error?.message || "Failed to backfill slots" });
+    }
+  });
+
   // Crear cuenta: registra gasto por cost
   app.post("/api/accounts", isAuthenticated, async (req, res) => {
     try {
@@ -491,7 +503,7 @@ export async function registerRoutes(
       res.json(expense);
     } catch (error) {
       console.error("Error creating expense:", error);
-      res.status(500).json({ message: "Failed to create expense" });
+      res.status(500).json({ message: "Failed to fetch expenses" });
     }
   });
 

@@ -78,6 +78,9 @@ export interface IStorage {
   // Settings
   getSettings(userId: string): Promise<Settings | null>;
   updateSettings(userId: string, updates: Partial<Settings>): Promise<Settings>;
+
+  // ✅ Backfill slots (para cuentas existentes sin perfiles)
+  backfillAccountSlots(userId: string): Promise<{ created: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -144,8 +147,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(accounts.serviceName, service.name), eq(accounts.userId, userId)));
 
     for (const account of serviceAccounts) {
-      // ✅ esto ARCHIVA
-      await this.deleteAccount(account.id, userId);
+      await this.deleteAccount(account.id, userId); // archiva
     }
 
     await db.delete(services).where(and(eq(services.id, id), eq(services.userId, userId)));
@@ -160,25 +162,67 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(accounts.createdAt));
   }
 
+  // ✅ helper: asegurar slots reales en DB
+  private async ensureSlotsTx(
+    tx: typeof db,
+    userId: string,
+    accountId: string,
+    desiredSlots: number
+  ): Promise<number> {
+    const current = await tx
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(and(eq(profiles.userId, userId), eq(profiles.accountId, accountId)));
+
+    const missing = Math.max(0, Number(desiredSlots || 0) - current.length);
+    if (missing === 0) return 0;
+
+    const payload = Array.from({ length: missing }, () => ({
+      userId,
+      accountId,
+      name: "Disponible",
+      phone: null,
+      pin: null,
+      clientId: null,
+      price: null,
+      startDate: null,
+      endDate: null,
+      status: "disponible",
+    }));
+
+    await tx.insert(profiles).values(payload as any);
+    return missing;
+  }
+
+  // ✅ AHORA: al crear cuenta, crea perfiles disponibles reales
   async createAccount(account: InsertAccount): Promise<Account> {
     const payload: any = { ...account };
 
-    // startDate / expirationDate NOT NULL -> fallback
     payload.startDate = toDateOrNull(payload.startDate) ?? new Date();
     payload.expirationDate = toDateOrNull(payload.expirationDate) ?? new Date();
 
-    // opcionales
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
-    const [newAccount] = await db.insert(accounts).values(payload).returning();
-    return newAccount;
+    const totalSlots = Number(payload.totalProfiles || 0);
+
+    const result = await db.transaction(async (tx) => {
+      const [newAccount] = await tx.insert(accounts).values(payload).returning();
+
+      // crear slots reales
+      if (totalSlots > 0) {
+        await this.ensureSlotsTx(tx as any, newAccount.userId, newAccount.id, totalSlots);
+      }
+
+      return newAccount;
+    });
+
+    return result;
   }
 
   async updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account> {
     const payload: any = { ...updates };
 
-    // NOT NULL: si viene inválido, lo omitimos
     if ("startDate" in payload) {
       const d = toDateOrNull(payload.startDate);
       if (d) payload.startDate = d;
@@ -190,7 +234,6 @@ export class DatabaseStorage implements IStorage {
       else delete payload.expirationDate;
     }
 
-    // opcionales
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
@@ -203,7 +246,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // ✅ Opción 1: ARCHIVAR (no borrar finanzas, no borrar perfiles)
+  // ✅ Opción 1: ARCHIVAR
   async deleteAccount(id: string, userId: string): Promise<void> {
     await db
       .update(accounts)
@@ -213,7 +256,6 @@ export class DatabaseStorage implements IStorage {
 
   // Profiles
   async getProfiles(userId: string): Promise<Profile[]> {
-    // ✅ solo perfiles de cuentas NO archivadas
     const activeAccounts = await db
       .select({ id: accounts.id })
       .from(accounts)
@@ -253,7 +295,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProfile(id: string, userId: string): Promise<void> {
-    // ✅ no borrar expenses (se conservan)
     await db.delete(profiles).where(and(eq(profiles.id, id), eq(profiles.userId, userId)));
   }
 
@@ -283,7 +324,6 @@ export class DatabaseStorage implements IStorage {
       throw new Error("No puedes mover perfiles entre servicios distintos");
     }
 
-    // ✅ solo mover perfiles activos
     const profilesToMove = await db
       .select()
       .from(profiles)
@@ -322,7 +362,6 @@ export class DatabaseStorage implements IStorage {
         const src = profilesToMove[i];
         const dstSlot = destAvailable[i];
 
-        // llenar slot destino
         await tx
           .update(profiles)
           .set({
@@ -337,7 +376,6 @@ export class DatabaseStorage implements IStorage {
           })
           .where(and(eq(profiles.id, dstSlot.id), eq(profiles.userId, userId)));
 
-        // limpiar origen
         await tx
           .update(profiles)
           .set({
@@ -423,28 +461,41 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateSettings(userId: string, updates: Partial<Settings>): Promise<Settings> {
-    // ✅ Blindaje: la app trabaja solo en USD (ignora cualquier otra moneda entrante)
-    const safeUpdates: Partial<Settings> = {
-      ...updates,
-      defaultCurrency: "USD",
-      updatedAt: new Date(),
-    };
-
     const [updated] = await db
       .update(settings)
-      .set(safeUpdates as any)
+      .set({ ...updates, updatedAt: new Date() })
       .where(eq(settings.userId, userId))
       .returning();
 
     if (!updated) {
       const [newSettings] = await db
         .insert(settings)
-        .values({ ...safeUpdates, userId } as any)
+        .values({ ...updates, userId } as any)
         .returning();
       return newSettings;
     }
 
     return updated;
+  }
+
+  // ✅ Backfill para cuentas ya creadas que no tienen slots reales
+  async backfillAccountSlots(userId: string): Promise<{ created: number }> {
+    const userAccounts = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.userId, userId), eq(accounts.isArchived, false)));
+
+    let created = 0;
+
+    await db.transaction(async (tx) => {
+      for (const acc of userAccounts) {
+        const desired = Number(acc.totalProfiles || 0);
+        if (desired <= 0) continue;
+        created += await this.ensureSlotsTx(tx as any, userId, acc.id, desired);
+      }
+    });
+
+    return { created };
   }
 }
 
