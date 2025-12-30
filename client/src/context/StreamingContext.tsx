@@ -43,17 +43,12 @@ export interface Account {
   expirationDate: string;
   isRenewable: boolean;
   cost: number;
-
-  // lo dejamos por compatibilidad pero no lo uses en UI
-  pricePerProfile: number;
+  pricePerProfile: number; // compatibilidad
 
   status: 'activa' | 'por vencer' | 'vencida';
   createdAt?: Date;
-
-  // backend puede venir sin profiles
   profiles?: Profile[];
 
-  // ✅ NUEVO: venta cuenta completa
   saleType?: 'perfiles' | 'cuenta';
   soldClientId?: string | null;
   soldStartDate?: string | null;
@@ -115,11 +110,12 @@ interface StreamingContextType {
     clientData: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
   ) => Promise<boolean>;
 
-  // ✅ NUEVO: vender cuenta completa
   sellAccount: (
     accountId: string,
     data: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
   ) => Promise<boolean>;
+
+  moveProfiles: (fromAccountId: string, toAccountId: string, profileIds: string[]) => Promise<boolean>;
 
   renewProfile: (accountId: string, profileId: string, renewalPrice: number) => Promise<boolean>;
   renewAccount: (accountId: string) => Promise<boolean>;
@@ -222,9 +218,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
         toast.error('Sesión expirada. Redirigiendo...');
-        setTimeout(() => {
-          window.location.href = '/api/login';
-        }, 500);
+        setTimeout(() => (window.location.href = '/api/login'), 500);
       }
     },
   });
@@ -235,14 +229,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-    },
-    onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast.error('Sesión expirada. Redirigiendo...');
-        setTimeout(() => {
-          window.location.href = '/api/login';
-        }, 500);
-      }
     },
   });
 
@@ -257,17 +243,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const createServiceMutation = useMutation({
     mutationFn: (service: any) => fetchAPI('/api/services', { method: 'POST', body: JSON.stringify(service) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/services'] }),
   });
 
   const updateServiceMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Service> }) =>
       fetchAPI(`/api/services/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/services'] }),
   });
 
   const deleteServiceMutation = useMutation({
@@ -308,23 +290,17 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const createClientMutation = useMutation({
     mutationFn: (client: any) => fetchAPI('/api/clients', { method: 'POST', body: JSON.stringify(client) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/clients'] }),
   });
 
   const createExpenseMutation = useMutation({
     mutationFn: (expense: any) => fetchAPI('/api/expenses', { method: 'POST', body: JSON.stringify(expense) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
   });
 
   const updateSettingsMutation = useMutation({
     mutationFn: (updates: any) => fetchAPI('/api/settings', { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/settings'] }),
   });
 
   // ✅ Crear cuenta: NO registra gasto aquí (ya lo hace el backend)
@@ -354,14 +330,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       await Promise.all(profilesData.map(profile => createProfileMutation.mutateAsync(profile)));
 
-      // fuerza refresco final
       await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
 
       toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al crear la cuenta');
       return false;
     }
@@ -372,7 +347,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await updateAccountMutation.mutateAsync({ id, updates });
       toast.success('Cuenta actualizada exitosamente');
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar la cuenta');
       return false;
     }
@@ -381,8 +356,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const deleteAccount = async (id: string) => {
     try {
       await deleteAccountMutation.mutateAsync(id);
-      toast.success('Cuenta maestra y sus perfiles eliminados');
-    } catch (error) {
+      toast.success('Cuenta eliminada (tus transacciones se conservan)');
+    } catch {
       toast.error('Error al eliminar la cuenta');
     }
   };
@@ -391,7 +366,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       const created = await createClientMutation.mutateAsync(client);
       return created.id;
-    } catch (error) {
+    } catch {
       toast.error('Error al agregar cliente');
       return '';
     }
@@ -400,7 +375,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const addExpense = async (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => {
     try {
       await createExpenseMutation.mutateAsync(expense);
-    } catch (error) {
+    } catch {
       toast.error('Error al registrar transacción');
     }
   };
@@ -415,9 +390,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       return null;
     }
     try {
-      const createdService = await createServiceMutation.mutateAsync(service);
-      return createdService;
-    } catch (error) {
+      return await createServiceMutation.mutateAsync(service);
+    } catch {
       toast.error('Error al crear el servicio');
       return null;
     }
@@ -428,7 +402,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await updateServiceMutation.mutateAsync({ id, updates });
       toast.success('Servicio actualizado exitosamente');
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar el servicio');
       return false;
     }
@@ -442,11 +416,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       let clientId = '';
       const existingClient = clients.find(c => c.phone === clientData.phone);
-      if (existingClient) {
-        clientId = existingClient.id;
-      } else {
-        clientId = await addClient({ name: clientData.name, phone: clientData.phone });
-      }
+      if (existingClient) clientId = existingClient.id;
+      else clientId = await addClient({ name: clientData.name, phone: clientData.phone });
 
       await updateProfileMutation.mutateAsync({
         id: profileId,
@@ -473,13 +444,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success(`Perfil vendido a ${clientData.name}`);
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al vender el perfil');
       return false;
     }
   };
 
-  // ✅ NUEVO: vender cuenta completa
   const sellAccount = async (
     accountId: string,
     data: { name: string; phone: string; pin?: string; price: number; startDate: string; endDate: string }
@@ -497,8 +467,26 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success('Cuenta completa vendida exitosamente');
       return true;
-    } catch (error) {
-      toast.error('Error al vender cuenta completa');
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al vender cuenta completa');
+      return false;
+    }
+  };
+
+  const moveProfiles = async (fromAccountId: string, toAccountId: string, profileIds: string[]) => {
+    try {
+      await fetchAPI('/api/profiles/move', {
+        method: 'POST',
+        body: JSON.stringify({ fromAccountId, toAccountId, profileIds }),
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+
+      toast.success(`Perfiles movidos: ${profileIds.length}`);
+      return true;
+    } catch (e: any) {
+      toast.error(e?.message || 'Error al mover perfiles');
       return false;
     }
   };
@@ -520,10 +508,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       const newEndDate = addDays(new Date(profile.endDate || new Date()), 30).toISOString();
       await updateProfileMutation.mutateAsync({
         id: profileId,
-        updates: {
-          endDate: newEndDate,
-          price: renewalPrice,
-        },
+        updates: { endDate: newEndDate, price: renewalPrice },
       });
 
       await addExpense({
@@ -537,7 +522,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success('Perfil renovado exitosamente');
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al renovar el perfil');
       return false;
     }
@@ -554,10 +539,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       const newExpirationDate = addDays(new Date(account.expirationDate), 30).toISOString();
       await updateAccountMutation.mutateAsync({
         id: accountId,
-        updates: {
-          expirationDate: newExpirationDate,
-          status: 'activa',
-        },
+        updates: { expirationDate: newExpirationDate, status: 'activa' },
       });
 
       await addExpense({
@@ -570,7 +552,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success(`Cuenta ${account.serviceName} renovada exitosamente`);
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al renovar la cuenta');
       return false;
     }
@@ -581,7 +563,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await updateProfileMutation.mutateAsync({ id: profileId, updates });
       toast.success('Perfil actualizado exitosamente');
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar el perfil');
       return false;
     }
@@ -591,25 +573,22 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       await updateSettingsMutation.mutateAsync(updates);
       toast.success('Configuración actualizada');
-    } catch (error) {
+    } catch {
       toast.error('Error al actualizar la configuración');
     }
   };
 
-  const getAllProfiles = () => {
-    return profiles.map(profile => {
+  const getAllProfiles = () =>
+    profiles.map(profile => {
       const account = accounts.find(a => a.id === profile.accountId);
-      return {
-        ...profile,
-        accountName: account?.serviceName || 'Desconocido',
-      };
+      return { ...profile, accountName: account?.serviceName || 'Desconocido' };
     });
-  };
 
   const getStats = () => {
     const totalSales = expenses.filter(e => e.type === 'ganancia').reduce((sum, e) => sum + e.amount, 0);
     const totalExpenses = expenses.filter(e => e.type === 'gasto').reduce((sum, e) => sum + e.amount, 0);
     const netProfit = totalSales - totalExpenses;
+
     const activeAccounts = accounts.filter(a => a.status === 'activa').length;
     const expiringSoon = accounts.filter(a => {
       const daysUntilExpiry = differenceInDays(new Date(a.expirationDate), new Date());
@@ -633,7 +612,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       await deleteServiceMutation.mutateAsync(id);
       toast.success('Servicio eliminado');
-    } catch (error) {
+    } catch {
       toast.error('Error al eliminar el servicio');
     }
   };
@@ -642,7 +621,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     try {
       await deleteProfileMutation.mutateAsync(profileId);
       toast.success('Perfil eliminado');
-    } catch (error) {
+    } catch {
       toast.error('Error al eliminar el perfil');
     }
   };
@@ -657,7 +636,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       });
       const data = await response.json();
       return data.ok;
-    } catch (error) {
+    } catch {
       return false;
     }
   };
@@ -673,10 +652,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       const newExpirationDate = addDays(new Date(account.expirationDate), renewalDays).toISOString();
       await updateAccountMutation.mutateAsync({
         id: accountId,
-        updates: {
-          expirationDate: newExpirationDate,
-          status: 'activa',
-        },
+        updates: { expirationDate: newExpirationDate, status: 'activa' },
       });
 
       await addExpense({
@@ -689,7 +665,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success(`Cuenta renovada por ${renewalDays} días`);
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al renovar la cuenta');
       return false;
     }
@@ -712,9 +688,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       const newEndDate = addDays(new Date(profile.endDate || new Date()), renewalDays).toISOString();
       await updateProfileMutation.mutateAsync({
         id: profileId,
-        updates: {
-          endDate: newEndDate,
-        },
+        updates: { endDate: newEndDate },
       });
 
       await addExpense({
@@ -728,7 +702,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success(`Perfil renovado por ${renewalDays} días`);
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al renovar el perfil');
       return false;
     }
@@ -759,7 +733,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
           price: null,
           startDate: null,
           endDate: null,
-        },
+        } as any,
       });
 
       await addExpense({
@@ -774,7 +748,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
       toast.success('Devolución procesada exitosamente');
       return true;
-    } catch (error) {
+    } catch {
       toast.error('Error al procesar la devolución');
       return false;
     }
@@ -790,7 +764,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         date: new Date().toISOString(),
       });
       toast.success('Ajuste registrado exitosamente');
-    } catch (error) {
+    } catch {
       toast.error('Error al registrar el ajuste');
     }
   };
@@ -809,7 +783,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         updateAccount,
         deleteAccount,
         sellProfile,
-        sellAccount, // ✅
+        sellAccount,
+        moveProfiles,
         renewProfile,
         renewAccount,
         updateProfile,
@@ -817,12 +792,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
         addExpense,
         addService,
         updateService,
+        deleteService,
         updateSettings,
         getAllProfiles,
         getStats,
         getServiceColor,
         getMaxProfilesByService,
-        deleteService,
         deleteProfile,
         sendTelegramTestNotification,
         renewAccountMaster,

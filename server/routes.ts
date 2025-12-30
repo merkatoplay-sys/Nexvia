@@ -206,19 +206,19 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
 
-      const [accounts, profiles] = await Promise.all([
+      const [accountsList, profilesList] = await Promise.all([
         storage.getAccounts(userId),
         storage.getProfiles(userId),
       ]);
 
       const byAccount: Record<string, any[]> = {};
-      for (const p of profiles) {
+      for (const p of profilesList) {
         if (!p?.accountId) continue;
         if (!byAccount[p.accountId]) byAccount[p.accountId] = [];
         byAccount[p.accountId].push(p);
       }
 
-      const accountsWithProfiles = accounts.map(a => ({
+      const accountsWithProfiles = accountsList.map(a => ({
         ...a,
         profiles: byAccount[a.id] ?? [],
       }));
@@ -243,9 +243,9 @@ export async function registerRoutes(
         userId,
         startDate,
         expirationDate,
-      });
+      } as any);
 
-      // ✅ Registrar el costo como GASTO
+      // ✅ Registrar el costo como GASTO (SOLO backend)
       const cost = Number(req.body?.cost ?? 0);
       if (cost > 0) {
         await storage.createExpense({
@@ -287,7 +287,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ NUEVO: vender CUENTA COMPLETA
+  // ✅ Vender CUENTA COMPLETA
   app.post("/api/accounts/:id/sell", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -301,25 +301,18 @@ export async function registerRoutes(
 
       const start = toDate(startDate);
       const end = toDate(endDate);
+      if (!start || !end) return res.status(400).json({ message: "Fechas inválidas" });
 
-      if (!start || !end) {
-        return res.status(400).json({ message: "Fechas inválidas" });
-      }
-
-      // Cuenta existe
       const accountsList = await storage.getAccounts(userId);
       const account = accountsList.find(a => a.id === accountId);
       if (!account) return res.status(404).json({ message: "Cuenta no encontrada" });
 
-      // Cliente por teléfono
       const allClients = await storage.getClients(userId);
       let client = allClients.find(c => c.phone === phone);
-
       if (!client) {
-        client = await storage.createClient({ userId, name, phone, notes: null });
+        client = await storage.createClient({ userId, name, phone, notes: null } as any);
       }
 
-      // Marcar cuenta como vendida
       await storage.updateAccount(accountId, userId, {
         saleType: "cuenta",
         soldClientId: client.id,
@@ -327,7 +320,6 @@ export async function registerRoutes(
         soldEndDate: end,
       } as any);
 
-      // Bloquear perfiles: todos quedan "activo" con el mismo cliente
       const allProfiles = await storage.getProfiles(userId);
       const accountProfiles = allProfiles.filter(p => p.accountId === accountId);
 
@@ -335,8 +327,8 @@ export async function registerRoutes(
         await storage.updateProfile(p.id, userId, {
           status: "activo",
           clientId: client.id,
-          name: name,
-          phone: phone,
+          name,
+          phone,
           pin: pin || null,
           startDate: start,
           endDate: end,
@@ -344,7 +336,6 @@ export async function registerRoutes(
         } as any);
       }
 
-      // Registrar GANANCIA
       await storage.createExpense({
         userId,
         description: `Venta cuenta completa - ${account.serviceName} - ${name}`,
@@ -358,9 +349,9 @@ export async function registerRoutes(
       } as any);
 
       res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error selling full account:", error);
-      res.status(500).json({ message: "Failed to sell account" });
+      res.status(500).json({ message: error?.message || "Failed to sell account" });
     }
   });
 
@@ -387,7 +378,29 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Create profile: convierte fechas si vienen
+  // ✅ mover perfiles
+  app.post("/api/profiles/move", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { fromAccountId, toAccountId, profileIds } = req.body as {
+        fromAccountId: string;
+        toAccountId: string;
+        profileIds: string[];
+      };
+
+      if (!fromAccountId || !toAccountId || !Array.isArray(profileIds) || profileIds.length === 0) {
+        return res.status(400).json({ message: "Datos incompletos para mover perfiles" });
+      }
+
+      const result = await storage.moveProfiles(userId, fromAccountId, toAccountId, profileIds);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error moving profiles:", error);
+      res.status(500).json({ message: error?.message || "Failed to move profiles" });
+    }
+  });
+
+  // ✅ Create profile
   app.post("/api/profiles", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -404,14 +417,14 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Update profile: convierte fechas si vienen (SOLUCIONA toISOString error)
+  // ✅ Update profile (fix timestamps)
   app.patch("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
 
       const updates: any = { ...req.body };
-      if ("startDate" in updates) updates.startDate = toDate(updates.startDate);
-      if ("endDate" in updates) updates.endDate = toDate(updates.endDate);
+      if ("startDate" in updates) updates.startDate = toDate(updates.startDate) ?? null;
+      if ("endDate" in updates) updates.endDate = toDate(updates.endDate) ?? null;
 
       const profile = await storage.updateProfile(req.params.id, userId, updates);
       res.json(profile);
@@ -467,15 +480,11 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ Create expense: convierte date
   app.post("/api/expenses", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
       const body: any = { ...req.body };
-
-      // si viene string, lo convertimos a Date
-      if ("date" in body) body.date = toDate(body.date) ?? new Date();
-      else body.date = new Date();
+      body.date = toDate(body.date) ?? new Date();
 
       const expense = await storage.createExpense({ ...body, userId });
       res.json(expense);

@@ -39,7 +39,8 @@ export const accounts = pgTable("accounts", {
   createdAt: timestamp("created_at").defaultNow(),
 
   // ✅ NUEVO: venta cuenta completa
-  saleType: varchar("sale_type", { length: 20 }).notNull().default("perfiles"), // "perfiles" | "cuenta"
+  // "perfiles" | "cuenta"
+  saleType: varchar("sale_type", { length: 20 }).notNull().default("perfiles"),
   soldClientId: varchar("sold_client_id"),
   soldStartDate: timestamp("sold_start_date"),
   soldEndDate: timestamp("sold_end_date"),
@@ -90,11 +91,11 @@ export const expenses = pgTable("expenses", {
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
-  defaultCurrency: varchar("default_currency", { length: 3 }).notNull().default('USD'),
+  defaultCurrency: varchar("default_currency", { length: 3 }).notNull().default("USD"),
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
-  notificationChannel: varchar("notification_channel", { length: 20 }).notNull().default('telegram'),
+  notificationChannel: varchar("notification_channel", { length: 20 }).notNull().default("telegram"),
   daysBeforeExpiry: integer("days_before_expiry").notNull().default(3),
-  notificationTime: varchar("notification_time", { length: 5 }).notNull().default('09:00'),
+  notificationTime: varchar("notification_time", { length: 5 }).notNull().default("09:00"),
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
   whatsappPhoneNumber: text("whatsapp_phone_number"),
@@ -120,25 +121,49 @@ export const insertServiceSchema = createInsertSchema(services).omit({
   createdAt: true,
 });
 
-export const insertAccountSchema = createInsertSchema(accounts).omit({
-  id: true,
-  createdAt: true,
-});
+/**
+ * ✅ IMPORTANTE:
+ * Hacemos opcional saleType y las fechas/cliente de venta
+ * para que NO te obligue el frontend al crear cuenta.
+ */
+export const insertAccountSchema = createInsertSchema(accounts)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    saleType: z.enum(["perfiles", "cuenta"]).optional(),
+    soldClientId: z.string().optional().nullable(),
+    soldStartDate: z.coerce.date().optional().nullable(),
+    soldEndDate: z.coerce.date().optional().nullable(),
+  });
 
-export const insertProfileSchema = createInsertSchema(profiles).omit({
-  id: true,
-  createdAt: true,
-});
+/**
+ * ✅ Fechas opcionales en perfiles (por si llegan como string ISO)
+ */
+export const insertProfileSchema = createInsertSchema(profiles)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    startDate: z.coerce.date().optional().nullable(),
+    endDate: z.coerce.date().optional().nullable(),
+  });
 
 export const insertClientSchema = createInsertSchema(clients).omit({
   id: true,
   createdAt: true,
 });
 
-export const insertExpenseSchema = createInsertSchema(expenses).omit({
-  id: true,
-  createdAt: true,
-});
+export const insertExpenseSchema = createInsertSchema(expenses)
+  .omit({
+    id: true,
+    createdAt: true,
+  })
+  .extend({
+    date: z.coerce.date(), // ✅ muy importante para expenses
+  });
 
 export const insertSettingsSchema = createInsertSchema(settings).omit({
   id: true,

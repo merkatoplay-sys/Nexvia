@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Search, User, MonitorPlay, Trash2, Pencil } from 'lucide-react';
+import { Plus, Search, User, MonitorPlay, Trash2, Pencil, ArrowRightLeft } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -28,6 +28,8 @@ export default function Accounts() {
     clients,
     updateProfile,
     deleteAccount,
+    updateAccount,
+    moveProfiles,
     getMaxProfilesByService,
     services,
     getServiceColor,
@@ -57,6 +59,23 @@ export default function Accounts() {
     isRenewable: true,
   });
 
+  // ✅ Editar cuenta maestra
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<any>(null);
+  const [editAccountData, setEditAccountData] = useState({
+    email: '',
+    password: '',
+    expirationDate: '',
+    cost: 0,
+    isRenewable: true,
+  });
+
+  // ✅ Mover perfiles
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveFromAccount, setMoveFromAccount] = useState<any>(null);
+  const [moveToAccountId, setMoveToAccountId] = useState<string>('');
+  const [selectedMoveProfileIds, setSelectedMoveProfileIds] = useState<string[]>([]);
+
   const filteredAccounts = useMemo(() => {
     return accountsSafe.filter((acc) => {
       const matchesSearch =
@@ -68,7 +87,7 @@ export default function Accounts() {
   }, [accountsSafe, searchTerm, filterService]);
 
   const handleAddAccount = async () => {
-    if (!newAccount.email || !newAccount.cost) return;
+    if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
 
     const success = await addAccount({
       serviceName: (newAccount.serviceName as ServiceType) || 'Netflix',
@@ -79,18 +98,13 @@ export default function Accounts() {
       expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       isRenewable: newAccount.isRenewable ?? true,
       cost: Number(newAccount.cost) || 0,
-      // 👇 ya no lo usas en UI, lo dejamos 0 para no romper schema si aún existe
       pricePerProfile: 0,
       status: 'activa',
     } as any);
 
     if (success) {
       setIsAddOpen(false);
-      setNewAccount({
-        serviceName: 'Netflix',
-        totalProfiles: 5,
-        isRenewable: true,
-      });
+      setNewAccount({ serviceName: 'Netflix', totalProfiles: 5, isRenewable: true });
     }
   };
 
@@ -100,6 +114,25 @@ export default function Accounts() {
       setDeleteConfirm({ open: false, id: '', name: '', email: '' });
     }
   };
+
+  // mover helpers
+  const activeProfilesOfFrom: ProfileLike[] = (moveFromAccount?.profiles ?? []).filter((p: any) => p.status === 'activo');
+
+  const selectFirstN = (n: number) => {
+    const ids = activeProfilesOfFrom.slice(0, n).map((p: any) => p.id);
+    setSelectedMoveProfileIds(ids);
+  };
+  const selectAll = () => setSelectedMoveProfileIds(activeProfilesOfFrom.map((p: any) => p.id));
+  const toggleSelect = (id: string) => {
+    setSelectedMoveProfileIds((prev) => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  };
+
+  const destinationCandidates = (accountsSafe ?? [])
+    .filter(a => moveFromAccount && a.id !== moveFromAccount.id && a.serviceName === moveFromAccount.serviceName)
+    .map(a => ({
+      ...a,
+      available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
+    }));
 
   return (
     <div className="space-y-8">
@@ -116,7 +149,7 @@ export default function Accounts() {
             </Button>
           </DialogTrigger>
 
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white">
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Registrar Nueva Cuenta</DialogTitle>
             </DialogHeader>
@@ -150,7 +183,7 @@ export default function Accounts() {
                     type="number"
                     className="glass-input"
                     value={newAccount.totalProfiles}
-                    onChange={(e) => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value) })}
+                    onChange={(e) => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value || '0') })}
                     max={getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')}
                     data-testid="input-profiles"
                   />
@@ -180,15 +213,15 @@ export default function Accounts() {
                 />
               </div>
 
-              {/* ✅ CAMBIO: costo + renovable */}
+              {/* ✅ costo + renovable */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Costo ($)</label>
                   <Input
                     type="number"
                     className="glass-input"
-                    value={(newAccount.cost as any) || ''}
-                    onChange={(e) => setNewAccount({ ...newAccount, cost: parseFloat(e.target.value) })}
+                    value={(newAccount.cost as any) ?? ''}
+                    onChange={(e) => setNewAccount({ ...newAccount, cost: parseFloat(e.target.value || '0') })}
                     data-testid="input-account-cost"
                   />
                 </div>
@@ -278,6 +311,7 @@ export default function Accounts() {
             const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
             const totalSlots = Number(account.totalProfiles || 0);
 
+            // ✅ placeholders para que SIEMPRE muestre el total desde el inicio
             const displayProfiles: ProfileLike[] = Array.from({ length: totalSlots }, (_, idx) => {
               const p = realProfiles[idx];
               return (
@@ -288,6 +322,8 @@ export default function Accounts() {
                 }
               );
             });
+
+            const activeCount = (realProfiles ?? []).filter((p: any) => p.status === 'activo').length;
 
             return (
               <motion.div
@@ -321,12 +357,39 @@ export default function Accounts() {
                         </Badge>
 
                         <div className="flex gap-2">
+                          {activeCount > 0 && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="w-8 h-8 p-0 bg-white/10 hover:bg-white/15 border border-white/10 text-white"
+                              title="Mover perfiles"
+                              onClick={() => {
+                                setMoveFromAccount(account);
+                                setMoveToAccountId('');
+                                setSelectedMoveProfileIds([]);
+                                setMoveOpen(true);
+                              }}
+                            >
+                              <ArrowRightLeft className="h-4 w-4" />
+                            </Button>
+                          )}
+
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 px-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-300"
-                            title="Editar (próximo paso)"
-                            onClick={() => {}}
+                            className="w-8 h-8 p-0 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-300"
+                            title="Editar cuenta"
+                            onClick={() => {
+                              setEditingAccount(account);
+                              setEditAccountData({
+                                email: account.email || '',
+                                password: account.password || '',
+                                expirationDate: format(new Date(account.expirationDate), 'yyyy-MM-dd'),
+                                cost: Number(account.cost || 0),
+                                isRenewable: !!account.isRenewable,
+                              });
+                              setEditAccountOpen(true);
+                            }}
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -335,7 +398,7 @@ export default function Accounts() {
                             size="sm"
                             variant="ghost"
                             onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.serviceName, email: account.email })}
-                            className="h-8 px-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
+                            className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
                             data-testid={`button-delete-account-${account.id}`}
                             title="Eliminar"
                           >
@@ -403,6 +466,7 @@ export default function Accounts() {
         </div>
       )}
 
+      {/* Editar perfil */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
           <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
@@ -445,7 +509,7 @@ export default function Accounts() {
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Precio</label>
-                <Input type="number" className="glass-input" value={editData.price} onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value) })} />
+                <Input type="number" className="glass-input" value={editData.price} onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value || '0') })} />
               </div>
             </div>
 
@@ -473,11 +537,211 @@ export default function Accounts() {
         </Dialog>
       )}
 
+      {/* Editar cuenta maestra */}
+      <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Cuenta</DialogTitle>
+          </DialogHeader>
+
+          {!editingAccount ? (
+            <p className="text-sm text-muted-foreground">No hay cuenta seleccionada.</p>
+          ) : (
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Email</label>
+                <Input className="glass-input" value={editAccountData.email} onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Contraseña</label>
+                <Input className="glass-input" value={editAccountData.password} onChange={(e) => setEditAccountData({ ...editAccountData, password: e.target.value })} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Vence (fecha)</label>
+                  <Input
+                    type="date"
+                    className="glass-input"
+                    value={editAccountData.expirationDate}
+                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">¿Renovable?</label>
+                  <Select
+                    value={editAccountData.isRenewable ? 'si' : 'no'}
+                    onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}
+                  >
+                    <SelectTrigger className="glass-input">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-white/10 text-white">
+                      <SelectItem value="si">Sí</SelectItem>
+                      <SelectItem value="no">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Costo (informativo)</label>
+                <Input
+                  type="number"
+                  className="glass-input"
+                  value={editAccountData.cost}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Nota: cambiar el costo aquí NO cambia el gasto histórico (eso queda en transacciones).
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditAccountOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+              Cancelar
+            </Button>
+            <Button
+              className="bg-primary text-white"
+              disabled={!editingAccount}
+              onClick={async () => {
+                if (!editingAccount) return;
+
+                const expISO = editAccountData.expirationDate
+                  ? new Date(`${editAccountData.expirationDate}T00:00:00`).toISOString()
+                  : undefined;
+
+                const ok = await updateAccount(editingAccount.id, {
+                  email: editAccountData.email,
+                  password: editAccountData.password,
+                  expirationDate: expISO,
+                  isRenewable: editAccountData.isRenewable,
+                  cost: Number(editAccountData.cost || 0),
+                } as any);
+
+                if (ok) setEditAccountOpen(false);
+              }}
+            >
+              Guardar cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mover perfiles */}
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Mover perfiles {moveFromAccount ? `(${moveFromAccount.serviceName})` : ''}</DialogTitle>
+          </DialogHeader>
+
+          {!moveFromAccount ? (
+            <p className="text-sm text-muted-foreground">No hay cuenta origen seleccionada.</p>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <p className="text-xs text-muted-foreground">Cuenta origen</p>
+                <p className="text-sm text-white font-medium">{moveFromAccount.email}</p>
+                <p className="text-xs text-muted-foreground">Activos: {activeProfilesOfFrom.length}</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Cuenta destino (mismo servicio)</label>
+                <Select value={moveToAccountId} onValueChange={setMoveToAccountId}>
+                  <SelectTrigger className="glass-input">
+                    <SelectValue placeholder="Selecciona una cuenta destino" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-white/10 text-white">
+                    {destinationCandidates.map((a: any) => (
+                      <SelectItem key={a.id} value={a.id} disabled={a.available === 0}>
+                        {a.email} ({a.available} slots)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Seleccionar perfiles a mover</label>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(1)} disabled={activeProfilesOfFrom.length < 1}>
+                    1
+                  </Button>
+                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(2)} disabled={activeProfilesOfFrom.length < 2}>
+                    2
+                  </Button>
+                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(3)} disabled={activeProfilesOfFrom.length < 3}>
+                    3
+                  </Button>
+                  <Button type="button" className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs" onClick={selectAll} disabled={activeProfilesOfFrom.length === 0}>
+                    Todos
+                  </Button>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {activeProfilesOfFrom.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between p-2 rounded-md bg-white/5 border border-white/10">
+                      <div>
+                        <p className="text-sm text-white font-medium">{p.name}</p>
+                        <p className="text-xs text-muted-foreground">{p.phone || 'Sin teléfono'}</p>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedMoveProfileIds.includes(p.id)}
+                          onChange={() => toggleSelect(p.id)}
+                          className="h-4 w-4 accent-violet-500"
+                        />
+                        Seleccionar
+                      </label>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Seleccionados: <span className="text-white">{selectedMoveProfileIds.length}</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMoveOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+              Cancelar
+            </Button>
+
+            <Button
+              className="bg-primary text-white"
+              disabled={!moveFromAccount || !moveToAccountId || selectedMoveProfileIds.length === 0}
+              onClick={async () => {
+                if (!moveFromAccount) return;
+
+                const ok = await moveProfiles(moveFromAccount.id, moveToAccountId, selectedMoveProfileIds);
+                if (ok) {
+                  setMoveOpen(false);
+                  setMoveFromAccount(null);
+                  setMoveToAccountId('');
+                  setSelectedMoveProfileIds([]);
+                }
+              }}
+            >
+              Mover seleccionados
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog
         open={deleteConfirm.open}
         onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
         title={`¿Eliminar cuenta "${deleteConfirm.name}"?`}
-        description={`Se eliminará la cuenta ${deleteConfirm.email} junto con todos sus perfiles y registros financieros asociados. Esta acción no se puede deshacer.`}
+        description={`Se eliminará la cuenta ${deleteConfirm.email} junto con sus perfiles. Las transacciones (gastos/ganancias) se conservarán para mantener tu contabilidad.`}
         confirmText="Eliminar Cuenta"
         cancelText="Cancelar"
         variant="destructive"
