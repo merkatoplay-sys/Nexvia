@@ -1,4 +1,5 @@
 import { useStreaming, Account, ServiceType } from '@/context/StreamingContext';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,8 @@ export default function Accounts() {
     services,
     getServiceColor,
   } = useStreaming();
+
+  const [, navigate] = useLocation();
 
   const accountsSafe = accounts ?? [];
   const servicesSafe = services ?? [];
@@ -133,6 +136,16 @@ export default function Accounts() {
       ...a,
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
+
+  // ✅ helper: enviar a ventas con preselección
+  const goToSell = (serviceName: string, accountId: string, profileId?: string) => {
+    const params = new URLSearchParams();
+    params.set('mode', 'perfil');
+    params.set('service', serviceName);
+    params.set('accountId', accountId);
+    if (profileId) params.set('profileId', profileId);
+    navigate(`/sales?${params.toString()}`);
+  };
 
   return (
     <div className="space-y-8">
@@ -311,7 +324,7 @@ export default function Accounts() {
             const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
             const totalSlots = Number(account.totalProfiles || 0);
 
-            // ✅ placeholders para que SIEMPRE muestre el total desde el inicio
+            // ✅ placeholders
             const displayProfiles: ProfileLike[] = Array.from({ length: totalSlots }, (_, idx) => {
               const p = realProfiles[idx];
               return (
@@ -428,7 +441,12 @@ export default function Accounts() {
                         <div
                           key={profile.id}
                           className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm group/profile cursor-pointer"
-                          onClick={() => {
+                          onClick={(e) => {
+                            // ✅ Evita navegación accidental / bubbling
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            // ✅ Activo => editar
                             if (profile.status === 'activo') {
                               setEditingProfile({ accountId: account.id, profile });
                               setEditData({
@@ -438,7 +456,12 @@ export default function Accounts() {
                                 phone: profile.phone || '',
                                 price: profile.price || 0,
                               });
+                              return;
                             }
+
+                            // ✅ Disponible => ir a venta
+                            const isPlaceholder = String(profile.id).startsWith('placeholder-');
+                            goToSell(account.serviceName, account.id, isPlaceholder ? undefined : profile.id);
                           }}
                         >
                           <div className="flex items-center gap-2 min-w-0">
@@ -453,7 +476,7 @@ export default function Accounts() {
                               Activo
                             </Badge>
                           ) : (
-                            <span className="text-[10px] text-muted-foreground">Disponible</span>
+                            <span className="text-[10px] text-primary">Vender</span>
                           )}
                         </div>
                       ))}
