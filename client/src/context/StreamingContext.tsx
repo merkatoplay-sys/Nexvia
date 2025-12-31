@@ -54,7 +54,6 @@ export interface Account {
   soldStartDate?: string | null;
   soldEndDate?: string | null;
 
-  // opcional (backend lo tiene)
   isArchived?: boolean;
   archivedAt?: string | null;
 }
@@ -81,7 +80,6 @@ export interface Expense {
   reference?: string | null;
   createdAt?: Date;
 
-  // ✅ anulación
   isVoided?: boolean;
   voidedAt?: string | null;
   voidReason?: string | null;
@@ -98,6 +96,11 @@ export interface AppSettings {
   telegramBotToken?: string | null;
   telegramChatId?: string | null;
   whatsappPhoneNumber?: string | null;
+
+  // ✅ NUEVO: plantillas
+  telegramAccountTemplate?: string | null;
+  telegramProfileTemplate?: string | null;
+  saleMessageTemplate?: string | null;
 }
 
 interface StreamingContextType {
@@ -134,7 +137,6 @@ interface StreamingContextType {
   addClient: (client: Omit<Client, 'id' | 'userId' | 'createdAt'>) => Promise<string>;
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
 
-  // ✅ nuevo: anular movimiento
   voidExpense: (expenseId: string, reason?: string) => Promise<boolean>;
 
   addService: (service: Omit<Service, 'id' | 'userId' | 'createdAt'>) => Promise<Service | null>;
@@ -181,37 +183,37 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: accounts = [], isLoading: accountsLoading } = useQuery({
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
     queryFn: () => fetchAPI('/api/accounts'),
     enabled: isAuthenticated,
   });
 
-  const { data: clients = [], isLoading: clientsLoading } = useQuery({
+  const { data: clients = [], isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ['/api/clients'],
     queryFn: () => fetchAPI('/api/clients'),
     enabled: isAuthenticated,
   });
 
-  const { data: expenses = [], isLoading: expensesLoading } = useQuery({
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ['/api/expenses'],
     queryFn: () => fetchAPI('/api/expenses'),
     enabled: isAuthenticated,
   });
 
-  const { data: services = [], isLoading: servicesLoading } = useQuery({
+  const { data: services = [], isLoading: servicesLoading } = useQuery<Service[]>({
     queryKey: ['/api/services'],
     queryFn: () => fetchAPI('/api/services'),
     enabled: isAuthenticated,
   });
 
-  const { data: profiles = [], isLoading: profilesLoading } = useQuery({
+  const { data: profiles = [], isLoading: profilesLoading } = useQuery<Profile[]>({
     queryKey: ['/api/profiles'],
     queryFn: () => fetchAPI('/api/profiles'),
     enabled: isAuthenticated,
   });
 
-  const { data: settings = null, isLoading: settingsLoading } = useQuery({
+  const { data: settings = null, isLoading: settingsLoading } = useQuery<AppSettings | null>({
     queryKey: ['/api/settings'],
     queryFn: () => fetchAPI('/api/settings'),
     enabled: isAuthenticated,
@@ -273,14 +275,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     },
   });
 
-  const createProfileMutation = useMutation({
-    mutationFn: (profile: any) => fetchAPI('/api/profiles', { method: 'POST', body: JSON.stringify(profile) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
-    },
-  });
-
   const updateProfileMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Profile> }) =>
       fetchAPI(`/api/profiles/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
@@ -321,9 +315,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/settings'] }),
   });
 
-  // Crear cuenta (gasto lo hace backend)
+  // ✅ Crear cuenta (backend YA crea slots reales en DB)
   const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
-    const service = services.find(s => s.name === newAccount.serviceName);
+    const service = services.find((s) => s.name === newAccount.serviceName);
     const maxProfiles = service?.maxProfiles || 7;
 
     if (newAccount.totalProfiles > maxProfiles) {
@@ -338,15 +332,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     };
 
     try {
-      const createdAccount = await createAccountMutation.mutateAsync(accountToCreate);
-
-      const profilesData = Array.from({ length: newAccount.totalProfiles }, () => ({
-        accountId: createdAccount.id,
-        name: 'Disponible',
-        status: 'disponible' as const,
-      }));
-
-      await Promise.all(profilesData.map(profile => createProfileMutation.mutateAsync(profile)));
+      await createAccountMutation.mutateAsync(accountToCreate);
 
       await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
@@ -415,7 +401,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       toast.error('El nombre del servicio no puede estar vacío');
       return null;
     }
-    if (services.some(s => s.name === service.name)) {
+    if (services.some((s) => s.name === service.name)) {
       toast.error('Este servicio ya existe');
       return null;
     }
@@ -445,7 +431,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     try {
       let clientId = '';
-      const existingClient = clients.find(c => c.phone === clientData.phone);
+      const existingClient = clients.find((c) => c.phone === clientData.phone);
       if (existingClient) clientId = existingClient.id;
       else clientId = await addClient({ name: clientData.name, phone: clientData.phone });
 
@@ -519,13 +505,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const renewProfile = async (accountId: string, profileId: string, renewalPrice: number) => {
-    const profile = profiles.find(p => p.id === profileId);
+    const profile = profiles.find((p) => p.id === profileId);
     if (!profile || profile.status !== 'activo') {
       toast.error('Este perfil no puede renovarse');
       return false;
     }
 
-    const account = accounts.find(a => a.id === accountId);
+    const account = accounts.find((a) => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
@@ -556,7 +542,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const renewAccount = async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId);
+    const account = accounts.find((a) => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
@@ -606,20 +592,20 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getAllProfiles = () =>
-    profiles.map(profile => {
-      const account = accounts.find(a => a.id === profile.accountId);
+    profiles.map((profile) => {
+      const account = accounts.find((a) => a.id === profile.accountId);
       return { ...profile, accountName: account?.serviceName || 'Desconocido' };
     });
 
   const getStats = () => {
-    const valid = expenses.filter(e => !e.isVoided);
+    const valid = expenses.filter((e) => !e.isVoided);
 
-    const totalSales = valid.filter(e => e.type === 'ganancia').reduce((sum, e) => sum + e.amount, 0);
-    const totalExpenses = valid.filter(e => e.type === 'gasto').reduce((sum, e) => sum + e.amount, 0);
+    const totalSales = valid.filter((e) => e.type === 'ganancia').reduce((sum, e) => sum + e.amount, 0);
+    const totalExpenses = valid.filter((e) => e.type === 'gasto').reduce((sum, e) => sum + e.amount, 0);
     const netProfit = totalSales - totalExpenses;
 
-    const activeAccounts = accounts.filter(a => a.status === 'activa').length;
-    const expiringSoon = accounts.filter(a => {
+    const activeAccounts = accounts.filter((a) => a.status === 'activa').length;
+    const expiringSoon = accounts.filter((a) => {
       const daysUntilExpiry = differenceInDays(new Date(a.expirationDate), new Date());
       return daysUntilExpiry >= 0 && daysUntilExpiry <= 7;
     }).length;
@@ -628,12 +614,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const getServiceColor = (serviceName: string) => {
-    const service = services.find(s => s.name === serviceName);
+    const service = services.find((s) => s.name === serviceName);
     return service?.color || '#6366f1';
   };
 
   const getMaxProfilesByService = (serviceName: ServiceType) => {
-    const service = services.find(s => s.name === serviceName);
+    const service = services.find((s) => s.name === serviceName);
     return service?.maxProfiles || 7;
   };
 
@@ -671,7 +657,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const renewAccountMaster = async (accountId: string, renewalDays: number, cost: number) => {
-    const account = accounts.find(a => a.id === accountId);
+    const account = accounts.find((a) => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
@@ -701,13 +687,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const renewProfileSale = async (accountId: string, profileId: string, renewalDays: number, cost: number) => {
-    const profile = profiles.find(p => p.id === profileId);
+    const profile = profiles.find((p) => p.id === profileId);
     if (!profile || profile.status !== 'activo') {
       toast.error('Este perfil no puede renovarse');
       return false;
     }
 
-    const account = accounts.find(a => a.id === accountId);
+    const account = accounts.find((a) => a.id === accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
@@ -738,13 +724,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const processRefund = async (profileId: string, amount: number, reason: string) => {
-    const profile = profiles.find(p => p.id === profileId);
+    const profile = profiles.find((p) => p.id === profileId);
     if (!profile) {
       toast.error('Perfil no encontrado');
       return false;
     }
 
-    const account = accounts.find(a => a.id === profile.accountId);
+    const account = accounts.find((a) => a.id === profile.accountId);
     if (!account) {
       toast.error('Cuenta no encontrada');
       return false;
