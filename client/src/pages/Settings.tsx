@@ -4,48 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Settings as SettingsIcon, Zap, Send, MessageSquare, Copy } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { Bell, Settings as SettingsIcon, Zap, Send } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
-const LS_SALE_TEMPLATE = 'sale_message_template_v1';
-
-const DEFAULT_SALE_TEMPLATE = `Hola 👋🏻
-Aquí están tus datos:
-
-📌 Servicio: {{serviceName}}
-📧 Cuenta: {{accountEmail}}
-🔑 Contraseña: {{accountPassword}}
-👤 Perfil: {{profileName}}
-🔢 PIN: {{pin}}
-📅 Vence: {{endDate}}
-
-Te avisaremos 1–2 días antes de tu renovación ✅
-Cualquier inconveniente, no dudes en contactarnos.`;
-
-function renderTemplate(tpl: string, data: Record<string, any>) {
-  return tpl.replace(/\{\{(\w+)\}\}/g, (_m, key) => {
-    const v = data?.[key];
-    return v === undefined || v === null ? '' : String(v);
-  });
-}
-
 export default function Settings() {
   const { settings, updateSettings, sendTelegramTestNotification } = useStreaming();
-  const [localSettings, setLocalSettings] = useState(settings);
+  const [localSettings, setLocalSettings] = useState<any>(settings);
   const [sendingTest, setSendingTest] = useState(false);
-
-  // ✅ plantilla mensaje cliente (localStorage por ahora)
-  const [saleTemplate, setSaleTemplate] = useState<string>(DEFAULT_SALE_TEMPLATE);
-
-  useEffect(() => {
-    // cargar plantilla guardada
-    try {
-      const saved = localStorage.getItem(LS_SALE_TEMPLATE);
-      if (saved && saved.trim()) setSaleTemplate(saved);
-    } catch {}
-  }, []);
 
   useEffect(() => {
     if (settings) {
@@ -53,6 +20,11 @@ export default function Settings() {
       const normalized = {
         ...settings,
         defaultCurrency: 'USD',
+
+        // ✅ defaults plantillas (si no existen todavía)
+        telegramAccountTemplate: settings.telegramAccountTemplate || '',
+        telegramProfileTemplate: settings.telegramProfileTemplate || '',
+        saleMessageTemplate: settings.saleMessageTemplate || '',
       };
       setLocalSettings(normalized);
     }
@@ -66,17 +38,6 @@ export default function Settings() {
     const displayHour = h > 12 ? h - 12 : h === 0 ? 12 : h;
     return `${displayHour.toString().padStart(2, '0')}:${minutes} ${ampm}`;
   };
-
-  const previewMessage = useMemo(() => {
-    return renderTemplate(saleTemplate, {
-      serviceName: 'Netflix',
-      accountEmail: 'correo@ejemplo.com',
-      accountPassword: 'clave123',
-      profileName: 'Perfil 1',
-      pin: '1234',
-      endDate: '2026-01-15',
-    });
-  }, [saleTemplate]);
 
   if (!localSettings) {
     return (
@@ -93,6 +54,7 @@ export default function Settings() {
         return;
       }
     }
+
     updateSettings({
       notificationsEnabled: localSettings.notificationsEnabled,
       notificationChannel: localSettings.notificationChannel,
@@ -101,7 +63,13 @@ export default function Settings() {
       telegramBotToken: localSettings.telegramBotToken,
       telegramChatId: localSettings.telegramChatId,
       whatsappPhoneNumber: localSettings.whatsappPhoneNumber,
+
+      // ✅ plantillas
+      telegramAccountTemplate: localSettings.telegramAccountTemplate || null,
+      telegramProfileTemplate: localSettings.telegramProfileTemplate || null,
+      saleMessageTemplate: localSettings.saleMessageTemplate || null,
     });
+
     toast.success('Notificaciones configuradas');
   };
 
@@ -121,23 +89,33 @@ export default function Settings() {
     toast.success('Moneda configurada: USD');
   };
 
-  const handleSaveSaleTemplate = () => {
-    try {
-      localStorage.setItem(LS_SALE_TEMPLATE, saleTemplate);
-      toast.success('Plantilla guardada');
-    } catch {
-      toast.error('No se pudo guardar la plantilla');
-    }
-  };
+  const defaultAccountTpl =
+`⚠️ CUENTA MAESTRA por vencer ({{daysLeft}} día(s))
+Servicio: {{serviceName}}
+📧 Email: {{accountEmail}}
+🔑 Pass: {{accountPassword}}
+📅 Vence: {{accountEndDate}}
 
-  const handleCopyPreview = async () => {
-    try {
-      await navigator.clipboard.writeText(previewMessage);
-      toast.success('Copiado ✅');
-    } catch {
-      toast.error('No se pudo copiar');
-    }
-  };
+Acción: ¿Renovar o cancelar?`;
+
+  const defaultProfileTpl =
+`⚠️ PERFIL por vencer ({{daysLeft}} día(s))
+Servicio: {{serviceName}}
+👤 Perfil: {{profileName}}
+📞 Tel: {{phone}}
+📅 Vence: {{profileEndDate}}
+
+📩 MENSAJE PARA CLIENTE (copiar/pegar):
+Hola 👋🏻
+Tu servicio {{serviceName}} está por vencer el {{profileEndDate}}.
+
+📧 Cuenta: {{accountEmail}}
+🔑 Contraseña: {{accountPassword}}
+👤 Perfil: {{profileName}}
+🔢 PIN: {{pin}}
+
+¿Deseas RENOVAR o ya NO usarás el servicio?
+Cualquier inconveniente, contáctanos ✅`;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -152,6 +130,7 @@ export default function Settings() {
             <Bell className="h-5 w-5 text-primary" /> Notificaciones
           </CardTitle>
         </CardHeader>
+
         <CardContent className="space-y-6">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -160,8 +139,8 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Recibe alertas sobre vencimientos próximos</p>
               </div>
               <Switch
-                checked={localSettings.notificationsEnabled}
-                onCheckedChange={(checked) => setLocalSettings({ ...localSettings, notificationsEnabled: checked })}
+                checked={!!localSettings.notificationsEnabled}
+                onCheckedChange={checked => setLocalSettings({ ...localSettings, notificationsEnabled: checked })}
                 data-testid="switch-notifications"
               />
             </div>
@@ -173,9 +152,7 @@ export default function Settings() {
                 <label className="text-sm font-medium text-white">Canal de notificación</label>
                 <Select
                   value={localSettings.notificationChannel}
-                  onValueChange={(channel) =>
-                    setLocalSettings({ ...localSettings, notificationChannel: channel as 'whatsapp' | 'telegram' })
-                  }
+                  onValueChange={channel => setLocalSettings({ ...localSettings, notificationChannel: channel as 'whatsapp' | 'telegram' })}
                 >
                   <SelectTrigger className="glass-input" data-testid="select-channel">
                     <SelectValue />
@@ -190,8 +167,8 @@ export default function Settings() {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-white">Avisar con anticipación</label>
                 <Select
-                  value={localSettings.daysBeforeExpiry.toString()}
-                  onValueChange={(days) => setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })}
+                  value={String(localSettings.daysBeforeExpiry ?? 2)}
+                  onValueChange={days => setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })}
                 >
                   <SelectTrigger className="glass-input" data-testid="select-days">
                     <SelectValue />
@@ -203,7 +180,7 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  (Y también enviaremos aviso <strong>el mismo día</strong> del vencimiento)
+                  Nota: El sistema también avisará <strong>el mismo día</strong> automáticamente.
                 </p>
               </div>
 
@@ -213,7 +190,7 @@ export default function Settings() {
                   type="time"
                   className="glass-input"
                   value={localSettings.notificationTime}
-                  onChange={(e) => setLocalSettings({ ...localSettings, notificationTime: e.target.value })}
+                  onChange={e => setLocalSettings({ ...localSettings, notificationTime: e.target.value })}
                   data-testid="input-notification-time"
                 />
                 <p className="text-xs text-muted-foreground">Formato: {formatTimeDisplay(localSettings.notificationTime)}</p>
@@ -222,9 +199,7 @@ export default function Settings() {
               {localSettings.notificationChannel === 'telegram' && (
                 <div className="space-y-4 border-t border-white/10 pt-4">
                   <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
-                    <p className="text-sm text-blue-200 mb-2">
-                      <strong>Configuración de Telegram</strong>
-                    </p>
+                    <p className="text-sm text-blue-200 mb-2"><strong>Configuración de Telegram</strong></p>
                     <p className="text-xs text-blue-200/80">
                       Necesitas un bot de Telegram.{' '}
                       <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">
@@ -240,7 +215,7 @@ export default function Settings() {
                       placeholder="123456:ABCDEFGHijklmnopqrstuvwxyz-1234567890"
                       className="glass-input"
                       value={localSettings.telegramBotToken || ''}
-                      onChange={(e) => setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })}
+                      onChange={e => setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })}
                       data-testid="input-telegram-token"
                     />
                   </div>
@@ -252,10 +227,10 @@ export default function Settings() {
                       placeholder="123456789 o -100123456789"
                       className="glass-input"
                       value={localSettings.telegramChatId || ''}
-                      onChange={(e) => setLocalSettings({ ...localSettings, telegramChatId: e.target.value })}
+                      onChange={e => setLocalSettings({ ...localSettings, telegramChatId: e.target.value })}
                       data-testid="input-telegram-chatid"
                     />
-                    <p className="text-xs text-muted-foreground">Inicia chat con tu bot y envía /start</p>
+                    <p className="text-xs text-muted-foreground">Inicia una conversación con tu bot y envía /start para obtener tu Chat ID</p>
                   </div>
 
                   <Button
@@ -267,15 +242,84 @@ export default function Settings() {
                     <Send className="h-3 w-3 mr-2" />
                     {sendingTest ? 'Enviando...' : 'Enviar Notificación de Prueba'}
                   </Button>
+
+                  {/* ✅ Plantillas */}
+                  <div className="border-t border-white/10 pt-4 space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-white">Plantilla Telegram (Cuenta maestra)</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                        onClick={() => setLocalSettings({ ...localSettings, telegramAccountTemplate: defaultAccountTpl })}
+                      >
+                        Usar base
+                      </Button>
+                    </div>
+
+                    <textarea
+                      className="glass-input w-full min-h-[150px] p-3 text-sm"
+                      value={localSettings.telegramAccountTemplate || ''}
+                      onChange={(e) => setLocalSettings({ ...localSettings, telegramAccountTemplate: e.target.value })}
+                      placeholder={defaultAccountTpl}
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      Variables: <code>{{`{{daysLeft}}`}}</code> <code>{{`{{serviceName}}`}}</code> <code>{{`{{accountEmail}}`}}</code> <code>{{`{{accountPassword}}`}}</code> <code>{{`{{accountEndDate}}`}}</code>
+                    </p>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-white">Plantilla Telegram (Perfil + mensaje cliente)</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                        onClick={() => setLocalSettings({ ...localSettings, telegramProfileTemplate: defaultProfileTpl })}
+                      >
+                        Usar base
+                      </Button>
+                    </div>
+
+                    <textarea
+                      className="glass-input w-full min-h-[220px] p-3 text-sm"
+                      value={localSettings.telegramProfileTemplate || ''}
+                      onChange={(e) => setLocalSettings({ ...localSettings, telegramProfileTemplate: e.target.value })}
+                      placeholder={defaultProfileTpl}
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      Variables: <code>{{`{{daysLeft}}`}}</code> <code>{{`{{serviceName}}`}}</code> <code>{{`{{accountEmail}}`}}</code> <code>{{`{{accountPassword}}`}}</code> <code>{{`{{profileName}}`}}</code> <code>{{`{{pin}}`}}</code> <code>{{`{{phone}}`}}</code> <code>{{`{{profileEndDate}}`}}</code>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {localSettings.notificationChannel === 'whatsapp' && (
+                <div className="space-y-4 border-t border-white/10 pt-4">
+                  <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-lg">
+                    <p className="text-sm text-green-200 mb-2"><strong>Configuración de WhatsApp</strong></p>
+                    <p className="text-xs text-green-200/80">Integración en desarrollo. Pronto podrás conectar WhatsApp Business API para notificaciones automáticas.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-white">Número de WhatsApp</label>
+                    <Input
+                      type="tel"
+                      placeholder="+34 123 45 67 89"
+                      className="glass-input bg-white/5"
+                      value={localSettings.whatsappPhoneNumber || ''}
+                      onChange={e => setLocalSettings({ ...localSettings, whatsappPhoneNumber: e.target.value })}
+                      disabled
+                      data-testid="input-whatsapp"
+                    />
+                    <p className="text-xs text-muted-foreground">Esta funcionalidad estará disponible próximamente</p>
+                  </div>
                 </div>
               )}
 
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg">
                 <p className="text-sm text-primary">
-                  📬 Recibirás notificaciones por{' '}
-                  <strong>{localSettings.notificationChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> {localSettings.daysBeforeExpiry}{' '}
-                  día{localSettings.daysBeforeExpiry > 1 ? 's' : ''} antes de vencimiento, a las{' '}
-                  <strong>{formatTimeDisplay(localSettings.notificationTime)}</strong> (y también el mismo día).
+                  📬 Recibirás notificaciones por <strong>{localSettings.notificationChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> con anticipación y también el <strong>mismo día</strong>, a las <strong>{formatTimeDisplay(localSettings.notificationTime)}</strong>
                 </p>
               </div>
             </>
@@ -291,50 +335,6 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* ✅ NUEVO: Mensajes para clientes */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" /> Mensaje para enviar al cliente
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="bg-white/5 border border-white/10 p-3 rounded-lg">
-            <p className="text-xs text-muted-foreground mb-2">Variables disponibles:</p>
-            <p className="text-xs text-muted-foreground">
-              <code>{{`{{serviceName}}`}}</code>, <code>{{`{{accountEmail}}`}}</code>, <code>{{`{{accountPassword}}`}}</code>,{' '}
-              <code>{{`{{profileName}}`}}</code>, <code>{{`{{pin}}`}}</code>, <code>{{`{{endDate}}`}}</code>
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-white">Plantilla</label>
-            <textarea
-              className="glass-input w-full min-h-[180px] p-3 text-sm"
-              value={saleTemplate}
-              onChange={(e) => setSaleTemplate(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-sm font-medium text-white">Vista previa</label>
-              <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white" onClick={handleCopyPreview}>
-                <Copy className="h-4 w-4 mr-2" /> Copiar
-              </Button>
-            </div>
-
-            <pre className="whitespace-pre-wrap text-xs bg-black/30 border border-white/10 rounded-lg p-3 text-muted-foreground">
-              {previewMessage}
-            </pre>
-          </div>
-
-          <Button onClick={handleSaveSaleTemplate} className="bg-primary hover:bg-primary/90 text-white w-full">
-            Guardar plantilla
-          </Button>
-        </CardContent>
-      </Card>
-
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -342,6 +342,7 @@ export default function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* ✅ Moneda fija en USD (sin selector) */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Moneda por defecto</label>
             <div className="glass-input flex items-center justify-between px-3 py-2">
@@ -359,7 +360,11 @@ export default function Settings() {
             </p>
           </div>
 
-          <Button onClick={handleSaveCurrency} className="bg-primary hover:bg-primary/90 text-white w-full" data-testid="button-save-currency">
+          <Button
+            onClick={handleSaveCurrency}
+            className="bg-primary hover:bg-primary/90 text-white w-full"
+            data-testid="button-save-currency"
+          >
             Guardar Preferencias
           </Button>
         </CardContent>
@@ -375,9 +380,7 @@ export default function Settings() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground">Versión</p>
-              <p className="text-sm text-white font-medium" data-testid="text-version">
-                2.0.0
-              </p>
+              <p className="text-sm text-white font-medium" data-testid="text-version">2.0.0</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Última actualización</p>
@@ -385,9 +388,7 @@ export default function Settings() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Estado</p>
-              <p className="text-sm text-emerald-400 font-medium" data-testid="text-status">
-                ✅ En línea
-              </p>
+              <p className="text-sm text-emerald-400 font-medium" data-testid="text-status">✅ En línea</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Tema</p>

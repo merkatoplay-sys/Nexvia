@@ -16,6 +16,9 @@ import { insertUserSchema, loginSchema } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 
+// ✅ NUEVO
+import { runExpiryNotifications } from "./notify";
+
 function toDate(val: any): Date | undefined {
   if (val === null || val === undefined || val === "") return undefined;
   if (val instanceof Date) return val;
@@ -540,6 +543,8 @@ export async function registerRoutes(
 
       const payload = {
         ...req.body,
+
+        // fuerza moneda
         defaultCurrency: "USD",
       };
 
@@ -548,6 +553,25 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // ✅✅✅ NUEVO: Endpoint para cron de notificaciones Telegram
+  // Llamar así:
+  // GET /api/cron/notify?secret=TU_SECRETO
+  app.get("/api/cron/notify", async (req, res) => {
+    const secret = String(req.query.secret || "");
+    const expected = process.env.CRON_SECRET || "";
+
+    if (!expected) return res.status(500).json({ message: "CRON_SECRET no configurado" });
+    if (secret !== expected) return res.status(401).json({ message: "No autorizado" });
+
+    try {
+      const result = await runExpiryNotifications();
+      return res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error(err);
+      return res.status(500).json({ ok: false, message: err?.message || "Error" });
     }
   });
 

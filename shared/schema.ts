@@ -110,6 +110,12 @@ export const settings = pgTable("settings", {
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
   whatsappPhoneNumber: text("whatsapp_phone_number"),
+
+  // ✅ Plantillas personalizables
+  telegramAccountTemplate: text("telegram_account_template"),
+  telegramProfileTemplate: text("telegram_profile_template"),
+  saleMessageTemplate: text("sale_message_template"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
