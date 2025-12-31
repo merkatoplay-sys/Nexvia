@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Search, User, MonitorPlay, Trash2, Pencil, ArrowRightLeft } from 'lucide-react';
+import { Plus, Search, User, MonitorPlay, Trash2, Pencil, ArrowRightLeft, Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -46,6 +46,11 @@ export default function Accounts() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all');
   const [isAddOpen, setIsAddOpen] = useState(false);
+
+  // ✅ mostrar/ocultar password
+  const [showNewAccountPassword, setShowNewAccountPassword] = useState(false);
+  const [showEditAccountPassword, setShowEditAccountPassword] = useState(false);
+  const [showPasswordByAccount, setShowPasswordByAccount] = useState<Record<string, boolean>>({});
 
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: ProfileLike } | null>(null);
   const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
@@ -108,6 +113,7 @@ export default function Accounts() {
 
     if (success) {
       setIsAddOpen(false);
+      setShowNewAccountPassword(false);
       setNewAccount({ serviceName: 'Netflix', totalProfiles: 5, isRenewable: true });
     }
   };
@@ -163,7 +169,10 @@ export default function Accounts() {
 
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]" data-testid="button-add-account">
+            <Button
+              className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]"
+              data-testid="button-add-account"
+            >
               <Plus className="mr-2 h-4 w-4" /> Nueva Cuenta
             </Button>
           </DialogTrigger>
@@ -216,20 +225,37 @@ export default function Accounts() {
                   placeholder="ejemplo@correo.com"
                   value={newAccount.email || ''}
                   onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                  autoComplete="off"
+                  name="serviceEmail"
                   data-testid="input-account-email"
                 />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Contraseña</label>
-                <Input
-                  className="glass-input"
-                  type="password"
-                  placeholder="••••••••"
-                  value={newAccount.password || ''}
-                  onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
-                  data-testid="input-account-password"
-                />
+
+                <div className="relative">
+                  <Input
+                    className="glass-input pr-10"
+                    type={showNewAccountPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={newAccount.password || ''}
+                    onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
+                    autoComplete="new-password"
+                    name="serviceSecret"
+                    data-testid="input-account-password"
+                  />
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-white"
+                    onClick={() => setShowNewAccountPassword((v) => !v)}
+                    title={showNewAccountPassword ? 'Ocultar' : 'Mostrar'}
+                  >
+                    {showNewAccountPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -363,7 +389,31 @@ export default function Accounts() {
                         </div>
                         <div className="min-w-0">
                           <CardTitle className="text-lg text-white">{account.serviceName}</CardTitle>
+
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+
+                          {/* ✅ Mostrar password debajo del correo (oculto por defecto) */}
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-xs text-muted-foreground truncate">
+                              {showPasswordByAccount[account.id] ? (account.password || '') : '••••••••'}
+                            </p>
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-white"
+                              onClick={() =>
+                                setShowPasswordByAccount((prev) => ({
+                                  ...prev,
+                                  [account.id]: !prev[account.id],
+                                }))
+                              }
+                              title={showPasswordByAccount[account.id] ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                            >
+                              {showPasswordByAccount[account.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            </Button>
+                          </div>
                         </div>
                       </div>
 
@@ -400,6 +450,7 @@ export default function Accounts() {
                             title="Editar cuenta"
                             onClick={() => {
                               setEditingAccount(account);
+                              setShowEditAccountPassword(false);
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
@@ -447,7 +498,6 @@ export default function Accounts() {
                           key={profile.id}
                           className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm cursor-pointer"
                           onClick={(e) => {
-                            // ✅ evita navegación accidental por Link/anchor
                             e.preventDefault?.();
                             e.stopPropagation?.();
 
@@ -463,7 +513,6 @@ export default function Accounts() {
                               return;
                             }
 
-                            // ✅ slot disponible -> ir a ventas
                             if (profile.status === 'disponible') {
                               goSellFromSlot(account.serviceName, account.id, profile);
                             }
@@ -583,12 +632,38 @@ export default function Accounts() {
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Email</label>
-                <Input className="glass-input" value={editAccountData.email} onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })} />
+                <Input
+                  className="glass-input"
+                  value={editAccountData.email}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })}
+                  autoComplete="off"
+                  name="serviceEmailEdit"
+                />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Contraseña</label>
-                <Input className="glass-input" value={editAccountData.password} onChange={(e) => setEditAccountData({ ...editAccountData, password: e.target.value })} />
+
+                <div className="relative">
+                  <Input
+                    className="glass-input pr-10"
+                    value={editAccountData.password}
+                    onChange={(e) => setEditAccountData({ ...editAccountData, password: e.target.value })}
+                    type={showEditAccountPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    name="serviceSecretEdit"
+                  />
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-white"
+                    onClick={() => setShowEditAccountPassword((v) => !v)}
+                    title={showEditAccountPassword ? 'Ocultar' : 'Mostrar'}
+                  >
+                    {showEditAccountPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -702,16 +777,39 @@ export default function Accounts() {
                 <label className="text-xs text-muted-foreground">Seleccionar perfiles a mover</label>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(1)} disabled={activeProfilesOfFrom.length < 1}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                    onClick={() => selectFirstN(1)}
+                    disabled={activeProfilesOfFrom.length < 1}
+                  >
                     1
                   </Button>
-                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(2)} disabled={activeProfilesOfFrom.length < 2}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                    onClick={() => selectFirstN(2)}
+                    disabled={activeProfilesOfFrom.length < 2}
+                  >
                     2
                   </Button>
-                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(3)} disabled={activeProfilesOfFrom.length < 3}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                    onClick={() => selectFirstN(3)}
+                    disabled={activeProfilesOfFrom.length < 3}
+                  >
                     3
                   </Button>
-                  <Button type="button" className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs" onClick={selectAll} disabled={activeProfilesOfFrom.length === 0}>
+                  <Button
+                    type="button"
+                    className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs"
+                    onClick={selectAll}
+                    disabled={activeProfilesOfFrom.length === 0}
+                  >
                     Todos
                   </Button>
                 </div>
