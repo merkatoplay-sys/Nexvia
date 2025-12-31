@@ -103,8 +103,15 @@ app.use((req, res, next) => {
 
   // 🔹 CREAR USUARIO ADMIN INICIAL (SOLO SI NO EXISTE)
   try {
-    await createUser("admin@admin.com", "admin123", "Admin", "User");
-    console.log("✅ Usuario admin creado");
+    const email = process.env.ADMIN_EMAIL;
+    const pass = process.env.ADMIN_PASSWORD;
+
+    if (!email || !pass) {
+      console.log("⚠️ ADMIN_EMAIL o ADMIN_PASSWORD no están definidas");
+    } else {
+      await createUser(email, pass, "Merkato", "Play");
+      console.log("✅ Usuario admin creado");
+    }
   } catch {
     console.log("ℹ️ Usuario admin ya existe");
   }
