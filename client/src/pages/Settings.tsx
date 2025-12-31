@@ -140,7 +140,7 @@ Cualquier inconveniente, contáctanos ✅`;
               </div>
               <Switch
                 checked={!!localSettings.notificationsEnabled}
-                onCheckedChange={checked => setLocalSettings({ ...localSettings, notificationsEnabled: checked })}
+                onCheckedChange={(checked) => setLocalSettings({ ...localSettings, notificationsEnabled: checked })}
                 data-testid="switch-notifications"
               />
             </div>
@@ -152,7 +152,9 @@ Cualquier inconveniente, contáctanos ✅`;
                 <label className="text-sm font-medium text-white">Canal de notificación</label>
                 <Select
                   value={localSettings.notificationChannel}
-                  onValueChange={channel => setLocalSettings({ ...localSettings, notificationChannel: channel as 'whatsapp' | 'telegram' })}
+                  onValueChange={(channel) =>
+                    setLocalSettings({ ...localSettings, notificationChannel: channel as 'whatsapp' | 'telegram' })
+                  }
                 >
                   <SelectTrigger className="glass-input" data-testid="select-channel">
                     <SelectValue />
@@ -168,7 +170,9 @@ Cualquier inconveniente, contáctanos ✅`;
                 <label className="text-sm font-medium text-white">Avisar con anticipación</label>
                 <Select
                   value={String(localSettings.daysBeforeExpiry ?? 2)}
-                  onValueChange={days => setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })}
+                  onValueChange={(days) =>
+                    setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })
+                  }
                 >
                   <SelectTrigger className="glass-input" data-testid="select-days">
                     <SelectValue />
@@ -190,16 +194,20 @@ Cualquier inconveniente, contáctanos ✅`;
                   type="time"
                   className="glass-input"
                   value={localSettings.notificationTime}
-                  onChange={e => setLocalSettings({ ...localSettings, notificationTime: e.target.value })}
+                  onChange={(e) => setLocalSettings({ ...localSettings, notificationTime: e.target.value })}
                   data-testid="input-notification-time"
                 />
-                <p className="text-xs text-muted-foreground">Formato: {formatTimeDisplay(localSettings.notificationTime)}</p>
+                <p className="text-xs text-muted-foreground">
+                  Formato: {formatTimeDisplay(localSettings.notificationTime)}
+                </p>
               </div>
 
               {localSettings.notificationChannel === 'telegram' && (
                 <div className="space-y-4 border-t border-white/10 pt-4">
                   <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg">
-                    <p className="text-sm text-blue-200 mb-2"><strong>Configuración de Telegram</strong></p>
+                    <p className="text-sm text-blue-200 mb-2">
+                      <strong>Configuración de Telegram</strong>
+                    </p>
                     <p className="text-xs text-blue-200/80">
                       Necesitas un bot de Telegram.{' '}
                       <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="underline">
@@ -215,7 +223,7 @@ Cualquier inconveniente, contáctanos ✅`;
                       placeholder="123456:ABCDEFGHijklmnopqrstuvwxyz-1234567890"
                       className="glass-input"
                       value={localSettings.telegramBotToken || ''}
-                      onChange={e => setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })}
+                      onChange={(e) => setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })}
                       data-testid="input-telegram-token"
                     />
                   </div>
@@ -227,10 +235,12 @@ Cualquier inconveniente, contáctanos ✅`;
                       placeholder="123456789 o -100123456789"
                       className="glass-input"
                       value={localSettings.telegramChatId || ''}
-                      onChange={e => setLocalSettings({ ...localSettings, telegramChatId: e.target.value })}
+                      onChange={(e) => setLocalSettings({ ...localSettings, telegramChatId: e.target.value })}
                       data-testid="input-telegram-chatid"
                     />
-                    <p className="text-xs text-muted-foreground">Inicia una conversación con tu bot y envía /start para obtener tu Chat ID</p>
+                    <p className="text-xs text-muted-foreground">
+                      Inicia una conversación con tu bot y envía /start para obtener tu Chat ID
+                    </p>
                   </div>
 
                   <Button
@@ -265,7 +275,12 @@ Cualquier inconveniente, contáctanos ✅`;
                     />
 
                     <p className="text-xs text-muted-foreground">
-                      Variables: <code>{{`{{daysLeft}}`}}</code> <code>{{`{{serviceName}}`}}</code> <code>{{`{{accountEmail}}`}}</code> <code>{{`{{accountPassword}}`}}</code> <code>{{`{{accountEndDate}}`}}</code>
+                      Variables:{' '}
+                      <code>{'{{daysLeft}}'}</code>{' '}
+                      <code>{'{{serviceName}}'}</code>{' '}
+                      <code>{'{{accountEmail}}'}</code>{' '}
+                      <code>{'{{accountPassword}}'}</code>{' '}
+                      <code>{'{{accountEndDate}}'}</code>
                     </p>
 
                     <div className="flex items-center justify-between gap-2">
@@ -288,7 +303,15 @@ Cualquier inconveniente, contáctanos ✅`;
                     />
 
                     <p className="text-xs text-muted-foreground">
-                      Variables: <code>{{`{{daysLeft}}`}}</code> <code>{{`{{serviceName}}`}}</code> <code>{{`{{accountEmail}}`}}</code> <code>{{`{{accountPassword}}`}}</code> <code>{{`{{profileName}}`}}</code> <code>{{`{{pin}}`}}</code> <code>{{`{{phone}}`}}</code> <code>{{`{{profileEndDate}}`}}</code>
+                      Variables:{' '}
+                      <code>{'{{daysLeft}}'}</code>{' '}
+                      <code>{'{{serviceName}}'}</code>{' '}
+                      <code>{'{{accountEmail}}'}</code>{' '}
+                      <code>{'{{accountPassword}}'}</code>{' '}
+                      <code>{'{{profileName}}'}</code>{' '}
+                      <code>{'{{pin}}'}</code>{' '}
+                      <code>{'{{phone}}'}</code>{' '}
+                      <code>{'{{profileEndDate}}'}</code>
                     </p>
                   </div>
                 </div>
@@ -297,8 +320,12 @@ Cualquier inconveniente, contáctanos ✅`;
               {localSettings.notificationChannel === 'whatsapp' && (
                 <div className="space-y-4 border-t border-white/10 pt-4">
                   <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-lg">
-                    <p className="text-sm text-green-200 mb-2"><strong>Configuración de WhatsApp</strong></p>
-                    <p className="text-xs text-green-200/80">Integración en desarrollo. Pronto podrás conectar WhatsApp Business API para notificaciones automáticas.</p>
+                    <p className="text-sm text-green-200 mb-2">
+                      <strong>Configuración de WhatsApp</strong>
+                    </p>
+                    <p className="text-xs text-green-200/80">
+                      Integración en desarrollo. Pronto podrás conectar WhatsApp Business API para notificaciones automáticas.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -308,7 +335,7 @@ Cualquier inconveniente, contáctanos ✅`;
                       placeholder="+34 123 45 67 89"
                       className="glass-input bg-white/5"
                       value={localSettings.whatsappPhoneNumber || ''}
-                      onChange={e => setLocalSettings({ ...localSettings, whatsappPhoneNumber: e.target.value })}
+                      onChange={(e) => setLocalSettings({ ...localSettings, whatsappPhoneNumber: e.target.value })}
                       disabled
                       data-testid="input-whatsapp"
                     />
@@ -319,7 +346,9 @@ Cualquier inconveniente, contáctanos ✅`;
 
               <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg">
                 <p className="text-sm text-primary">
-                  📬 Recibirás notificaciones por <strong>{localSettings.notificationChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> con anticipación y también el <strong>mismo día</strong>, a las <strong>{formatTimeDisplay(localSettings.notificationTime)}</strong>
+                  📬 Recibirás notificaciones por{' '}
+                  <strong>{localSettings.notificationChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> con anticipación y también el{' '}
+                  <strong>mismo día</strong>, a las <strong>{formatTimeDisplay(localSettings.notificationTime)}</strong>
                 </p>
               </div>
             </>
@@ -342,7 +371,6 @@ Cualquier inconveniente, contáctanos ✅`;
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* ✅ Moneda fija en USD (sin selector) */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-white">Moneda por defecto</label>
             <div className="glass-input flex items-center justify-between px-3 py-2">
@@ -400,3 +428,4 @@ Cualquier inconveniente, contáctanos ✅`;
     </motion.div>
   );
 }
+
