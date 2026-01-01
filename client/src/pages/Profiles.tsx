@@ -244,7 +244,11 @@ export default function Profiles() {
                                           onClick={() => togglePin(key)}
                                           title={pinVisible[key] ? 'Ocultar PIN' : 'Ver PIN'}
                                         >
-                                          {pinVisible[key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                          {pinVisible[key] ? (
+                                            <EyeOff className="h-4 w-4" />
+                                          ) : (
+                                            <Eye className="h-4 w-4" />
+                                          )}
                                         </Button>
                                       ) : null}
                                     </div>
@@ -260,15 +264,19 @@ export default function Profiles() {
                                 {isEditing ? (
                                   <div className="space-y-2">
                                     <label className="text-xs text-muted-foreground">Cliente Asignado</label>
+
+                                    {/* ✅ FIX: Radix Select NO permite SelectItem con value="" */}
                                     <Select
-                                      value={editData.clientId}
-                                      onValueChange={val => setEditData({ ...editData, clientId: val })}
+                                      value={editData.clientId || "__none__"}
+                                      onValueChange={(val) =>
+                                        setEditData({ ...editData, clientId: val === "__none__" ? "" : val })
+                                      }
                                     >
                                       <SelectTrigger className="glass-input">
                                         <SelectValue placeholder="Seleccionar cliente" />
                                       </SelectTrigger>
                                       <SelectContent className="bg-popover border-white/10 text-white">
-                                        <SelectItem value="">Sin asignar</SelectItem>
+                                        <SelectItem value="__none__">Sin asignar</SelectItem>
                                         {clientsSafe.map(c => (
                                           <SelectItem key={c.id} value={c.id}>
                                             {c.name}
@@ -297,9 +305,7 @@ export default function Profiles() {
                                 ) : (
                                   <div>
                                     <p className="text-xs text-muted-foreground mb-1">Precio</p>
-                                    <p className="text-sm font-medium text-white">
-                                      ${profile.price != null ? profile.price : 0}
-                                    </p>
+                                    <p className="text-sm font-medium text-white">${profile.price != null ? profile.price : 0}</p>
                                   </div>
                                 )}
 
