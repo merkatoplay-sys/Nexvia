@@ -55,6 +55,9 @@ export default function Accounts() {
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: ProfileLike } | null>(null);
   const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
 
+  // ✅ ver/ocultar PIN dentro del modal de editar perfil
+  const [showEditProfilePin, setShowEditProfilePin] = useState(false);
+
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string; email: string }>({
     open: false,
     id: '',
@@ -134,12 +137,12 @@ export default function Accounts() {
   };
   const selectAll = () => setSelectedMoveProfileIds(activeProfilesOfFrom.map((p: any) => p.id));
   const toggleSelect = (id: string) => {
-    setSelectedMoveProfileIds((prev) => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+    setSelectedMoveProfileIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const destinationCandidates = (accountsSafe ?? [])
-    .filter(a => moveFromAccount && a.id !== moveFromAccount.id && a.serviceName === moveFromAccount.serviceName)
-    .map(a => ({
+    .filter((a) => moveFromAccount && a.id !== moveFromAccount.id && a.serviceName === moveFromAccount.serviceName)
+    .map((a) => ({
       ...a,
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
@@ -194,11 +197,13 @@ export default function Accounts() {
                       <SelectValue placeholder="Servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {servicesSafe.filter((s) => s.name && s.name.trim()).map((s) => (
-                        <SelectItem key={s.id} value={s.name}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
+                      {servicesSafe
+                        .filter((s) => s.name && s.name.trim())
+                        .map((s) => (
+                          <SelectItem key={s.id} value={s.name}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -272,10 +277,7 @@ export default function Accounts() {
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select
-                    value={(newAccount.isRenewable ?? true) ? 'si' : 'no'}
-                    onValueChange={(val) => setNewAccount({ ...newAccount, isRenewable: val === 'si' })}
-                  >
+                  <Select value={(newAccount.isRenewable ?? true) ? 'si' : 'no'} onValueChange={(val) => setNewAccount({ ...newAccount, isRenewable: val === 'si' })}>
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Selecciona" />
                     </SelectTrigger>
@@ -303,13 +305,7 @@ export default function Accounts() {
       <div className="flex gap-4 items-center bg-card/40 p-4 rounded-lg border border-white/5 backdrop-blur-sm">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9 glass-input bg-background/20"
-            placeholder="Buscar por email..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            data-testid="input-search"
-          />
+          <Input className="pl-9 glass-input bg-background/20" placeholder="Buscar por email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} data-testid="input-search" />
         </div>
 
         <Select value={filterService} onValueChange={setFilterService}>
@@ -318,11 +314,13 @@ export default function Accounts() {
           </SelectTrigger>
           <SelectContent className="bg-popover border-white/10 text-white">
             <SelectItem value="all">Todos</SelectItem>
-            {servicesSafe.map((s) => (
-              <SelectItem key={s.id} value={s.name}>
-                {s.name}
-              </SelectItem>
-            ))}
+            {servicesSafe
+              .filter((s) => s.name && s.name.trim())
+              .map((s) => (
+                <SelectItem key={s.id} value={s.name}>
+                  {s.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
@@ -371,20 +369,12 @@ export default function Accounts() {
             const activeCount = (realProfiles ?? []).filter((p: any) => p.status === 'activo').length;
 
             return (
-              <motion.div
-                key={account.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-              >
+              <motion.div key={account.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
                 <Card className="glass-card overflow-hidden group hover:border-primary/30 transition-all duration-300">
                   <CardHeader className="bg-white/5 border-b border-white/5 pb-3">
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shrink-0"
-                          style={{ backgroundColor: serviceColor }}
-                        >
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shrink-0" style={{ backgroundColor: serviceColor }}>
                           {String(account.serviceName || '').substring(0, 1)}
                         </div>
                         <div className="min-w-0">
@@ -394,9 +384,7 @@ export default function Accounts() {
 
                           {/* ✅ Mostrar password debajo del correo (oculto por defecto) */}
                           <div className="flex items-center gap-2 mt-1">
-                            <p className="text-xs text-muted-foreground truncate">
-                              {showPasswordByAccount[account.id] ? (account.password || '') : '••••••••'}
-                            </p>
+                            <p className="text-xs text-muted-foreground truncate">{showPasswordByAccount[account.id] ? (account.password || '') : '••••••••'}</p>
 
                             <Button
                               type="button"
@@ -418,10 +406,7 @@ export default function Accounts() {
                       </div>
 
                       <div className="flex flex-col items-end gap-2 shrink-0">
-                        <Badge
-                          variant={daysLeft < 3 ? 'destructive' : 'default'}
-                          className={daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}
-                        >
+                        <Badge variant={daysLeft < 3 ? 'destructive' : 'default'} className={daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}>
                           {daysLeft} días
                         </Badge>
 
@@ -503,12 +488,14 @@ export default function Accounts() {
 
                             if (profile.status === 'activo') {
                               setEditingProfile({ accountId: account.id, profile });
+                              setShowEditProfilePin(false);
+
                               setEditData({
-                                name: profile.name,
-                                pin: profile.pin || '',
-                                clientId: profile.clientId || '',
-                                phone: profile.phone || '',
-                                price: profile.price || 0,
+                                name: profile.name ?? '',
+                                pin: profile.pin ?? '',
+                                clientId: profile.clientId ?? '',
+                                phone: profile.phone ?? '',
+                                price: profile.price ?? 0,
                               });
                               return;
                             }
@@ -521,19 +508,13 @@ export default function Accounts() {
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <User className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
-                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
-                              {profile.name}
-                            </span>
+                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>{profile.name}</span>
                           </div>
 
                           {profile.status === 'activo' ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
-                              Activo
-                            </Badge>
+                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">Activo</Badge>
                           ) : profile.status === 'vencido' ? (
-                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
-                              Vencido
-                            </Badge>
+                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">Vencido</Badge>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">Disponible</span>
                           )}
@@ -551,7 +532,7 @@ export default function Accounts() {
       {/* Editar perfil */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>Editar Perfil: {editingProfile.profile.name}</DialogTitle>
             </DialogHeader>
@@ -567,19 +548,42 @@ export default function Accounts() {
                 <Input className="glass-input" value={editData.phone} onChange={(e) => setEditData({ ...editData, phone: e.target.value })} />
               </div>
 
+              {/* ✅ PIN visible con toggle */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">PIN</label>
-                <Input className="glass-input" value={editData.pin} onChange={(e) => setEditData({ ...editData, pin: e.target.value })} />
+                <div className="relative">
+                  <Input
+                    className="glass-input pr-10"
+                    type={showEditProfilePin ? 'text' : 'password'}
+                    value={editData.pin}
+                    onChange={(e) => setEditData({ ...editData, pin: e.target.value })}
+                    placeholder="PIN"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-white"
+                    onClick={() => setShowEditProfilePin((v) => !v)}
+                    title={showEditProfilePin ? 'Ocultar PIN' : 'Mostrar PIN'}
+                  >
+                    {showEditProfilePin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Cliente</label>
-                <Select value={editData.clientId} onValueChange={(val) => setEditData({ ...editData, clientId: val })}>
+
+                {/* ✅ FIX: Radix Select NO permite SelectItem con value="" */}
+                <Select
+                  value={editData.clientId?.trim() ? editData.clientId : "__none__"}
+                  onValueChange={(val) => setEditData({ ...editData, clientId: val === "__none__" ? "" : val })}
+                >
                   <SelectTrigger className="glass-input">
-                    <SelectValue />
+                    <SelectValue placeholder="Seleccionar cliente" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
-                    <SelectItem value="">Sin asignar</SelectItem>
+                    <SelectItem value="__none__">Sin asignar</SelectItem>
                     {clientsSafe.map((c: any) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
@@ -596,18 +600,22 @@ export default function Accounts() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">
+              <Button
+                variant="outline"
+                onClick={() => setEditingProfile(null)}
+                className="border-white/10 hover:bg-white/5 text-white"
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={() => {
                   updateProfile(editingProfile.accountId, editingProfile.profile.id, {
                     name: editData.name,
-                    pin: editData.pin || undefined,
-                    clientId: editData.clientId || undefined,
-                    phone: editData.phone || undefined,
+                    pin: editData.pin?.trim() ? editData.pin.trim() : null,
+                    clientId: editData.clientId?.trim() ? editData.clientId.trim() : null,
+                    phone: editData.phone?.trim() ? editData.phone.trim() : null,
                     price: editData.price || undefined,
-                  });
+                  } as any);
                   setEditingProfile(null);
                 }}
                 className="bg-primary text-white"
@@ -621,7 +629,7 @@ export default function Accounts() {
 
       {/* Editar cuenta maestra */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Editar Cuenta</DialogTitle>
           </DialogHeader>
@@ -632,18 +640,11 @@ export default function Accounts() {
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Email</label>
-                <Input
-                  className="glass-input"
-                  value={editAccountData.email}
-                  onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })}
-                  autoComplete="off"
-                  name="serviceEmailEdit"
-                />
+                <Input className="glass-input" value={editAccountData.email} onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })} autoComplete="off" name="serviceEmailEdit" />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Contraseña</label>
-
                 <div className="relative">
                   <Input
                     className="glass-input pr-10"
@@ -669,20 +670,12 @@ export default function Accounts() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Vence (fecha)</label>
-                  <Input
-                    type="date"
-                    className="glass-input"
-                    value={editAccountData.expirationDate}
-                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: e.target.value })}
-                  />
+                  <Input type="date" className="glass-input" value={editAccountData.expirationDate} onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: e.target.value })} />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select
-                    value={editAccountData.isRenewable ? 'si' : 'no'}
-                    onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}
-                  >
+                  <Select value={editAccountData.isRenewable ? 'si' : 'no'} onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}>
                     <SelectTrigger className="glass-input">
                       <SelectValue />
                     </SelectTrigger>
@@ -696,15 +689,8 @@ export default function Accounts() {
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Costo (informativo)</label>
-                <Input
-                  type="number"
-                  className="glass-input"
-                  value={editAccountData.cost}
-                  onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Nota: cambiar el costo aquí NO cambia el gasto histórico (eso queda en transacciones).
-                </p>
+                <Input type="number" className="glass-input" value={editAccountData.cost} onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })} />
+                <p className="text-[11px] text-muted-foreground">Nota: cambiar el costo aquí NO cambia el gasto histórico (eso queda en transacciones).</p>
               </div>
             </div>
           )}
@@ -719,17 +705,18 @@ export default function Accounts() {
               onClick={async () => {
                 if (!editingAccount) return;
 
-                const expISO = editAccountData.expirationDate
-                  ? new Date(`${editAccountData.expirationDate}T00:00:00`).toISOString()
-                  : undefined;
+                const expISO = editAccountData.expirationDate ? new Date(`${editAccountData.expirationDate}T00:00:00`).toISOString() : undefined;
 
-                const ok = await updateAccount(editingAccount.id, {
-                  email: editAccountData.email,
-                  password: editAccountData.password,
-                  expirationDate: expISO,
-                  isRenewable: editAccountData.isRenewable,
-                  cost: Number(editAccountData.cost || 0),
-                } as any);
+                const ok = await updateAccount(
+                  editingAccount.id,
+                  {
+                    email: editAccountData.email,
+                    password: editAccountData.password,
+                    expirationDate: expISO,
+                    isRenewable: editAccountData.isRenewable,
+                    cost: Number(editAccountData.cost || 0),
+                  } as any
+                );
 
                 if (ok) setEditAccountOpen(false);
               }}
@@ -742,7 +729,7 @@ export default function Accounts() {
 
       {/* Mover perfiles */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Mover perfiles {moveFromAccount ? `(${moveFromAccount.serviceName})` : ''}</DialogTitle>
           </DialogHeader>
@@ -777,39 +764,16 @@ export default function Accounts() {
                 <label className="text-xs text-muted-foreground">Seleccionar perfiles a mover</label>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
-                    onClick={() => selectFirstN(1)}
-                    disabled={activeProfilesOfFrom.length < 1}
-                  >
+                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(1)} disabled={activeProfilesOfFrom.length < 1}>
                     1
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
-                    onClick={() => selectFirstN(2)}
-                    disabled={activeProfilesOfFrom.length < 2}
-                  >
+                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(2)} disabled={activeProfilesOfFrom.length < 2}>
                     2
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
-                    onClick={() => selectFirstN(3)}
-                    disabled={activeProfilesOfFrom.length < 3}
-                  >
+                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(3)} disabled={activeProfilesOfFrom.length < 3}>
                     3
                   </Button>
-                  <Button
-                    type="button"
-                    className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs"
-                    onClick={selectAll}
-                    disabled={activeProfilesOfFrom.length === 0}
-                  >
+                  <Button type="button" className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs" onClick={selectAll} disabled={activeProfilesOfFrom.length === 0}>
                     Todos
                   </Button>
                 </div>
@@ -823,12 +787,7 @@ export default function Accounts() {
                       </div>
 
                       <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedMoveProfileIds.includes(p.id)}
-                          onChange={() => toggleSelect(p.id)}
-                          className="h-4 w-4 accent-violet-500"
-                        />
+                        <input type="checkbox" checked={selectedMoveProfileIds.includes(p.id)} onChange={() => toggleSelect(p.id)} className="h-4 w-4 accent-violet-500" />
                         Seleccionar
                       </label>
                     </div>
