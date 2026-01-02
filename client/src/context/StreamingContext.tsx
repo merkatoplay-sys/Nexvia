@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { addDays, differenceInDays } from 'date-fns';
@@ -14,6 +14,10 @@ export interface Service {
   color: string;
   maxProfiles: number;
   isCustom: boolean;
+
+  // ✅ opcional (para logo)
+  imageUrl?: string | null;
+
   createdAt?: Date;
 }
 
@@ -35,7 +39,13 @@ export interface Profile {
 export interface Account {
   id: string;
   userId: string;
+
+  // ✅ NUEVO: relación real por ID (esto evita el problema de renombre)
+  serviceId?: string | null;
+
+  // ✅ legacy / compat (se mantiene para cuentas viejas o backend viejo)
   serviceName: ServiceType;
+
   email: string;
   password?: string | null;
   totalProfiles: number;
@@ -97,7 +107,7 @@ export interface AppSettings {
   telegramChatId?: string | null;
   whatsappPhoneNumber?: string | null;
 
-  // ✅ NUEVO: plantillas
+  // ✅ plantillas
   telegramAccountTemplate?: string | null;
   telegramProfileTemplate?: string | null;
   saleMessageTemplate?: string | null;
@@ -147,8 +157,10 @@ interface StreamingContextType {
 
   getAllProfiles: () => Array<Profile & { accountName: string }>;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
-  getServiceColor: (serviceName: string) => string;
-  getMaxProfilesByService: (serviceName: ServiceType) => number;
+
+  // ✅ ahora puede recibir serviceId o serviceName
+  getServiceColor: (serviceRef: string) => string;
+  getMaxProfilesByService: (serviceRef: ServiceType) => number;
 
   deleteProfile: (accountId: string, profileId: string) => Promise<void>;
 
@@ -219,8 +231,62 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     enabled: isAuthenticated,
   });
 
-  const isLoading =
-    accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
+  const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
+
+  // ✅ Helpers: resolver servicio por ID y fallback por nombre
+  const getServiceForAccount = (acc?: Partial<Account> | null) => {
+    if (!acc) return null;
+    const byId = acc.serviceId ? services.find((s) => s.id === acc.serviceId) : null;
+    if (byId) return byId;
+    if (acc.serviceName) return services.find((s) => s.name === acc.serviceName) ?? null;
+    return null;
+  };
+
+  const resolveServiceName = (acc?: Partial<Account> | null) => {
+    const svc = getServiceForAccount(acc);
+    return svc?.name ?? acc?.serviceName ?? 'Servicio';
+  };
+
+  const resolveMaxProfiles = (acc?: Partial<Account> | null) => {
+    const svc = getServiceForAccount(acc);
+    return svc?.maxProfiles || 7;
+  };
+
+  // ✅ Backfill automático (1 vez): si cuentas viejas no tienen serviceId, intenta setearlo
+  const didBackfillRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (didBackfillRef.current) return;
+    if (!accounts.length || !services.length) return;
+
+    const legacy = accounts.filter((a) => !a.serviceId && a.serviceName);
+    if (legacy.length === 0) {
+      didBackfillRef.current = true;
+      return;
+    }
+
+    didBackfillRef.current = true;
+
+    (async () => {
+      for (const acc of legacy) {
+        const svc = services.find((s) => s.name === acc.serviceName);
+        if (!svc) continue;
+        try {
+          await fetchAPI(`/api/accounts/${acc.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ serviceId: svc.id }),
+          });
+        } catch {
+          // si backend no soporta serviceId todavía, no pasa nada
+        }
+      }
+
+      // refrescar cuentas (por si backend sí guardó serviceId)
+      try {
+        await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      } catch {}
+    })();
+  }, [isAuthenticated, accounts, services, queryClient]);
 
   const createAccountMutation = useMutation({
     mutationFn: (account: any) => fetchAPI('/api/accounts', { method: 'POST', body: JSON.stringify(account) }),
@@ -315,13 +381,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/settings'] }),
   });
 
-  // ✅ Crear cuenta (backend YA crea slots reales en DB)
+  // ✅ Crear cuenta: valida por serviceId y muestra el nombre actual del servicio
   const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
-    const service = services.find((s) => s.name === newAccount.serviceName);
-    const maxProfiles = service?.maxProfiles || 7;
+    const maxProfiles = resolveMaxProfiles(newAccount);
 
-    if (newAccount.totalProfiles > maxProfiles) {
-      toast.error(`${newAccount.serviceName} permite un máximo de ${maxProfiles} perfiles.`);
+    if ((newAccount.totalProfiles || 0) > maxProfiles) {
+      toast.error(`${resolveServiceName(newAccount)} permite un máximo de ${maxProfiles} perfiles.`);
       return false;
     }
 
@@ -338,7 +403,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
 
-      toast.success(`Cuenta ${newAccount.serviceName} agregada exitosamente`);
+      toast.success(`Cuenta ${resolveServiceName(newAccount)} agregada exitosamente`);
       return true;
     } catch {
       toast.error('Error al crear la cuenta');
@@ -357,7 +422,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ✅ ahora “eliminar” = archivar
+  // ✅ ahora “eliminar” = archivar (según tu backend)
   const deleteAccount = async (id: string) => {
     try {
       await deleteAccountMutation.mutateAsync(id);
@@ -525,7 +590,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       });
 
       await addExpense({
-        description: `Renovación ${profile.name} - ${account.serviceName}`,
+        description: `Renovación ${profile.name} - ${resolveServiceName(account)}`,
         amount: renewalPrice,
         type: 'ganancia',
         profileId,
@@ -556,14 +621,14 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       });
 
       await addExpense({
-        description: `Renovación cuenta ${account.serviceName}`,
+        description: `Renovación cuenta ${resolveServiceName(account)}`,
         amount: account.cost,
         type: 'gasto',
         accountId,
         date: new Date().toISOString(),
       });
 
-      toast.success(`Cuenta ${account.serviceName} renovada exitosamente`);
+      toast.success(`Cuenta ${resolveServiceName(account)} renovada exitosamente`);
       return true;
     } catch {
       toast.error('Error al renovar la cuenta');
@@ -594,7 +659,8 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const getAllProfiles = () =>
     profiles.map((profile) => {
       const account = accounts.find((a) => a.id === profile.accountId);
-      return { ...profile, accountName: account?.serviceName || 'Desconocido' };
+      const accountName = account ? resolveServiceName(account) : 'Desconocido';
+      return { ...profile, accountName };
     });
 
   const getStats = () => {
@@ -613,14 +679,22 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return { totalSales, totalExpenses, netProfit, activeAccounts, expiringSoon };
   };
 
-  const getServiceColor = (serviceName: string) => {
-    const service = services.find((s) => s.name === serviceName);
-    return service?.color || '#6366f1';
+  // ✅ ahora acepta serviceId o serviceName
+  const getServiceColor = (serviceRef: string) => {
+    const byId = services.find((s) => s.id === serviceRef);
+    if (byId?.color) return byId.color;
+
+    const byName = services.find((s) => s.name === serviceRef);
+    return byName?.color || '#6366f1';
   };
 
-  const getMaxProfilesByService = (serviceName: ServiceType) => {
-    const service = services.find((s) => s.name === serviceName);
-    return service?.maxProfiles || 7;
+  // ✅ ahora acepta serviceId o serviceName
+  const getMaxProfilesByService = (serviceRef: ServiceType) => {
+    const byId = services.find((s) => s.id === serviceRef);
+    if (byId?.maxProfiles) return byId.maxProfiles;
+
+    const byName = services.find((s) => s.name === serviceRef);
+    return byName?.maxProfiles || 7;
   };
 
   const deleteService = async (id: string) => {
@@ -671,7 +745,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       });
 
       await addExpense({
-        description: `Renovación cuenta ${account.serviceName} (${renewalDays} días)`,
+        description: `Renovación cuenta ${resolveServiceName(account)} (${renewalDays} días)`,
         amount: cost,
         type: 'gasto',
         accountId,
@@ -707,7 +781,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       });
 
       await addExpense({
-        description: `Renovación ${profile.name} - ${account.serviceName} (${renewalDays} días)`,
+        description: `Renovación ${profile.name} - ${resolveServiceName(account)} (${renewalDays} días)`,
         amount: cost,
         type: 'ganancia',
         profileId,

@@ -44,7 +44,7 @@ export default function Accounts() {
   const clientsSafe = clients ?? [];
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterService, setFilterService] = useState<string>('all'); // ahora guardamos serviceId
+  const [filterService, setFilterService] = useState<string>('all'); // guarda serviceId
   const [isAddOpen, setIsAddOpen] = useState(false);
 
   // mostrar/ocultar password
@@ -65,10 +65,10 @@ export default function Accounts() {
     email: '',
   });
 
-  // ✅ IMPORTANTE: ahora usamos serviceId (pero mantenemos serviceName por compatibilidad)
+  // ✅ IMPORTANTE: usamos serviceId (pero mantenemos serviceName por compat)
   const [newAccount, setNewAccount] = useState<Partial<Account> & { serviceId?: string }>({
-    serviceId: '', // se setea cuando abre modal
-    serviceName: '', // fallback
+    serviceId: '',
+    serviceName: '',
     totalProfiles: 5,
     isRenewable: true,
   });
@@ -90,7 +90,7 @@ export default function Accounts() {
   const [moveToAccountId, setMoveToAccountId] = useState<string>('');
   const [selectedMoveProfileIds, setSelectedMoveProfileIds] = useState<string[]>([]);
 
-  // ✅ resolver servicio por account (por ID, fallback por nombre para cuentas viejas)
+  // ✅ resolver servicio por account (por ID, fallback por nombre viejo)
   const getServiceForAccount = (acc: any) => {
     if (!acc) return null;
     const byId = acc.serviceId ? servicesSafe.find((s: any) => s.id === acc.serviceId) : null;
@@ -153,7 +153,7 @@ export default function Accounts() {
     if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
 
     const success = await addAccount({
-      // ✅ enviar ambos (serviceId + serviceName) para no romper hasta que migres backend
+      // ✅ enviar ambos
       serviceId,
       serviceName,
 
@@ -210,11 +210,12 @@ export default function Accounts() {
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
 
-  // helper: mandar a ventas con query (mantengo serviceName para que no rompas Sales por ahora)
-  const goSellFromSlot = (serviceName: string, accountId: string, profile?: ProfileLike) => {
+  // ✅ mandar a ventas con serviceId (y serviceName fallback)
+  const goSellFromSlot = (serviceId: string, serviceName: string, accountId: string, profile?: ProfileLike) => {
     const params = new URLSearchParams();
     params.set('mode', 'perfil');
-    params.set('service', serviceName);
+    params.set('serviceId', serviceId); // ✅ nuevo
+    params.set('service', serviceName); // ✅ fallback
     params.set('accountId', accountId);
 
     if (profile && !profile.__placeholder && profile.status === 'disponible') {
@@ -224,20 +225,15 @@ export default function Accounts() {
     navigate(`/sales?${params.toString()}`);
   };
 
-  // helper imagen del servicio (varios nombres posibles para no fallar)
+  // helper imagen del servicio
   const getServiceImage = (svc: any): string => {
     if (!svc) return '';
-    return (
-      svc.imageUrl ||
-      svc.iconUrl ||
-      svc.image ||
-      svc.logoUrl ||
-      ''
-    );
+    return svc.imageUrl || svc.iconUrl || svc.image || svc.logoUrl || '';
   };
 
   const newSvc = getServiceForNewAccount();
-  const maxProfilesLabel = getMaxProfilesByService?.((newSvc?.name || newAccount.serviceName || 'Netflix') as any) ?? 5;
+  const maxProfilesLabel =
+    getMaxProfilesByService?.((newSvc?.id || newSvc?.name || newAccount.serviceName || 'Netflix') as any) ?? 5;
 
   return (
     <div className="space-y-8">
@@ -267,7 +263,6 @@ export default function Accounts() {
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Servicio</label>
 
-                  {/* ✅ Select usa service.id */}
                   <Select
                     onValueChange={(val) => {
                       const svc = servicesSafe.find((s: any) => s.id === val);
@@ -401,7 +396,6 @@ export default function Accounts() {
           />
         </div>
 
-        {/* ✅ filtro por serviceId */}
         <Select value={filterService} onValueChange={setFilterService}>
           <SelectTrigger className="w-[180px] glass-input bg-background/20" data-testid="select-filter">
             <SelectValue placeholder="Filtrar Servicio" />
@@ -445,7 +439,13 @@ export default function Accounts() {
 
             const svc = getServiceForAccount(account);
             const serviceName = svc?.name ?? account.serviceName ?? 'Servicio';
-            const serviceColor = svc?.color ?? (getServiceColor?.(serviceName) as string) ?? '#6366f1';
+
+            // ✅ importante: obtener color por ID si existe
+            const serviceColor =
+              svc?.color ??
+              (getServiceColor?.((svc?.id || account.serviceId || serviceName) as any) as string) ??
+              '#6366f1';
+
             const serviceImage = getServiceImage(svc);
 
             const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
@@ -622,7 +622,8 @@ export default function Accounts() {
                             }
 
                             if (profile.status === 'disponible') {
-                              goSellFromSlot(serviceName, account.id, profile);
+                              const finalServiceId = account.serviceId || svc?.id || '';
+                              goSellFromSlot(finalServiceId, serviceName, account.id, profile);
                             }
                           }}
                           title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
@@ -748,7 +749,7 @@ export default function Accounts() {
         </Dialog>
       )}
 
-      {/* Editar cuenta maestra (igual que tu código) */}
+      {/* Editar cuenta maestra */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
         <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
