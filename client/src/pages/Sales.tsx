@@ -3,8 +3,21 @@ import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, ShoppingCart, MessageSquare, Copy } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
@@ -35,7 +48,7 @@ const formatSpanishLongDate = (isoOrDate: string | Date | null | undefined) => {
   try {
     const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
     if (isNaN(d.getTime())) return '';
-    return format(d, "d 'de' MMMM yyyy", { locale: es }); // Ej: 4 de enero 2026
+    return format(d, "d 'de' MMMM yyyy", { locale: es });
   } catch {
     return '';
   }
@@ -69,11 +82,12 @@ export default function Sales() {
     endDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
   });
 
-  // ✅ Modal mensaje cliente (se abre con 1 toque sobre perfil activo)
+  // ✅ Modal mensaje cliente
   const [msgOpen, setMsgOpen] = useState(false);
   const [msgAccountId, setMsgAccountId] = useState<string>('');
-  const [msgProfileId, setMsgProfileId] = useState<string>(''); // permite cambiar a otro perfil del mismo account o cuenta completa
+  const [msgProfileId, setMsgProfileId] = useState<string>('');
   const [msgText, setMsgText] = useState<string>('');
+  const [autoGenOnOpen, setAutoGenOnOpen] = useState(false);
 
   // ✅ Leer query params para abrir modal desde Accounts (opcional)
   useEffect(() => {
@@ -89,7 +103,7 @@ export default function Sales() {
     if (service) setSelectedService(service);
 
     if (accountId) {
-      const exists = accountsSafe.some(a => a.id === accountId);
+      const exists = accountsSafe.some((a) => a.id === accountId);
       if (exists) setSelectedAccountId(accountId);
     }
 
@@ -99,15 +113,17 @@ export default function Sales() {
   }, [location, accountsSafe]);
 
   const uniqueServices = useMemo(() => {
-    return Array.from(new Set(accountsSafe.map(a => a.serviceName).filter(s => s && String(s).trim())));
+    return Array.from(
+      new Set(accountsSafe.map((a) => a.serviceName).filter((s) => s && String(s).trim()))
+    );
   }, [accountsSafe]);
 
   const filteredAccounts = useMemo(() => {
-    return selectedService ? accountsSafe.filter(a => a.serviceName === selectedService) : accountsSafe;
+    return selectedService ? accountsSafe.filter((a) => a.serviceName === selectedService) : accountsSafe;
   }, [accountsSafe, selectedService]);
 
   const selectedAccount = useMemo(() => {
-    return accountsSafe.find(a => a.id === selectedAccountId);
+    return accountsSafe.find((a) => a.id === selectedAccountId);
   }, [accountsSafe, selectedAccountId]);
 
   const isAccountSold = (acc: any) => {
@@ -118,7 +134,6 @@ export default function Sales() {
     return isAfter(soldEnd, new Date());
   };
 
-  // Solo perfiles reales del account seleccionado (modal venta)
   const selectedAccountProfiles = (selectedAccount?.profiles ?? []) as any[];
   const availableProfiles = selectedAccountProfiles.filter((p: any) => p.status === 'disponible');
 
@@ -180,15 +195,8 @@ export default function Sales() {
     if (ok) resetForm();
   };
 
-  const openMessageDialogForProfile = (accountId: string, profileId: string) => {
-    setMsgText('');
-    setMsgAccountId(accountId);
-    setMsgProfileId(profileId);
-    setMsgOpen(true);
-  };
-
-  const buildMessage = () => {
-    const acc = accountsSafe.find(a => a.id === msgAccountId);
+  const buildMessage = (accountId: string, profileId: string) => {
+    const acc = accountsSafe.find((a) => a.id === accountId);
     if (!acc) return '';
 
     const tpl =
@@ -196,7 +204,8 @@ export default function Sales() {
         ? String(settings.saleMessageTemplate)
         : DEFAULT_SALE_MESSAGE_TPL;
 
-    const prof = msgProfileId ? (acc.profiles ?? []).find((p: any) => p.id === msgProfileId) : null;
+    const prof = (acc.profiles ?? []).find((p: any) => p.id === profileId);
+    if (!prof) return '';
 
     const endDateRaw = prof?.endDate || acc.soldEndDate || acc.expirationDate || '';
 
@@ -204,19 +213,34 @@ export default function Sales() {
       serviceName: String(acc.serviceName ?? ''),
       accountEmail: String(acc.email ?? ''),
       accountPassword: String((acc as any).password ?? ''),
-      profileName: prof ? String(prof.name ?? '') : 'Cuenta completa',
-      pin: prof ? String(prof.pin ?? '') : '',
+      profileName: String(prof.name ?? ''),
+      pin: String(prof.pin ?? ''),
       endDate: formatSpanishLongDate(endDateRaw),
     };
 
     return applyTemplate(tpl, vars).trim();
   };
 
-  const handleGenerateMessage = () => {
-    const text = buildMessage();
-    setMsgText(text);
-    if (!text) toast.error('No se pudo generar el mensaje (revisa cuenta/perfil).');
+  // ✅ 1 toque: abrir y generar automáticamente
+  const openMessageForProfile = (accountId: string, profileId: string) => {
+    setMsgText('');
+    setMsgAccountId(accountId);
+    setMsgProfileId(profileId);
+    setAutoGenOnOpen(true);
+    setMsgOpen(true);
   };
+
+  useEffect(() => {
+    if (!msgOpen) return;
+    if (!autoGenOnOpen) return;
+    if (!msgAccountId || !msgProfileId) return;
+
+    const text = buildMessage(msgAccountId, msgProfileId);
+    setMsgText(text);
+    setAutoGenOnOpen(false);
+
+    if (!text) toast.error('No se pudo generar el mensaje (revisa cuenta/perfil).');
+  }, [msgOpen, autoGenOnOpen, msgAccountId, msgProfileId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCopy = async () => {
     if (!msgText.trim()) return;
@@ -228,7 +252,11 @@ export default function Sales() {
     }
   };
 
-  const msgAccount = useMemo(() => accountsSafe.find(a => a.id === msgAccountId), [accountsSafe, msgAccountId]);
+  const msgAccount = useMemo(
+    () => accountsSafe.find((a) => a.id === msgAccountId),
+    [accountsSafe, msgAccountId]
+  );
+
   const msgActiveProfiles = useMemo(() => {
     return (msgAccount?.profiles ?? []).filter((p: any) => p.status === 'activo');
   }, [msgAccount]);
@@ -304,7 +332,7 @@ export default function Sales() {
                     <SelectValue placeholder="Selecciona un servicio" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
-                    {uniqueServices.map(service => (
+                    {uniqueServices.map((service) => (
                       <SelectItem key={service} value={service}>
                         {service}
                       </SelectItem>
@@ -362,9 +390,6 @@ export default function Sales() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    Tip: También puedes tocar un slot disponible para abrir este modal.
-                  </p>
                 </div>
               )}
 
@@ -374,7 +399,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="Juan Pérez"
                   value={saleData.name}
-                  onChange={e => setSaleData({ ...saleData, name: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, name: e.target.value })}
                 />
               </div>
 
@@ -384,7 +409,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="+502 5555 5555"
                   value={saleData.phone}
-                  onChange={e => setSaleData({ ...saleData, phone: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, phone: e.target.value })}
                 />
               </div>
 
@@ -394,7 +419,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="1234"
                   value={saleData.pin}
-                  onChange={e => setSaleData({ ...saleData, pin: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, pin: e.target.value })}
                 />
               </div>
 
@@ -405,7 +430,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="Ej: 25"
                   value={saleData.price}
-                  onChange={e => setSaleData({ ...saleData, price: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, price: e.target.value })}
                 />
               </div>
 
@@ -416,7 +441,7 @@ export default function Sales() {
                     type="date"
                     className="glass-input"
                     value={saleData.startDate}
-                    onChange={e => setSaleData({ ...saleData, startDate: e.target.value })}
+                    onChange={(e) => setSaleData({ ...saleData, startDate: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -425,7 +450,7 @@ export default function Sales() {
                     type="date"
                     className="glass-input"
                     value={saleData.endDate}
-                    onChange={e => setSaleData({ ...saleData, endDate: e.target.value })}
+                    onChange={(e) => setSaleData({ ...saleData, endDate: e.target.value })}
                   />
                 </div>
               </div>
@@ -447,7 +472,15 @@ export default function Sales() {
         </Dialog>
       </div>
 
-      {/* ✅ Modal Mensaje Cliente (se abre tocando un perfil ACTIVO) */}
+      {/* ✅ TIP GLOBAL (una sola vez) */}
+      <div className="text-[12px] sm:text-sm text-muted-foreground">
+        <span className="inline-flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          Tip: <strong className="text-white/90">Toca un perfil activo</strong> para generar y copiar el mensaje del cliente.
+        </span>
+      </div>
+
+      {/* ✅ Modal Mensaje Cliente */}
       <Dialog open={msgOpen} onOpenChange={setMsgOpen}>
         <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -456,16 +489,15 @@ export default function Sales() {
 
           <div className="space-y-3">
             <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Selecciona perfil (activo)</label>
+              <label className="text-xs text-muted-foreground">Cambiar perfil (activo)</label>
               <Select
-                value={msgProfileId || '__account__'}
-                onValueChange={(v) => setMsgProfileId(v === '__account__' ? '' : v)}
+                value={msgProfileId || '__none__'}
+                onValueChange={(v) => setMsgProfileId(v === '__none__' ? '' : v)}
               >
                 <SelectTrigger className="glass-input">
                   <SelectValue placeholder="Selecciona un perfil" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border-white/10 text-white">
-                  <SelectItem value="__account__">Cuenta completa</SelectItem>
                   {msgActiveProfiles.map((p: any) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
@@ -473,16 +505,20 @@ export default function Sales() {
                   ))}
                 </SelectContent>
               </Select>
-
-              <p className="text-[11px] text-muted-foreground">
-                Genera el mensaje y luego lo copias.
-              </p>
             </div>
 
             <div className="flex gap-2">
-              <Button className="bg-primary text-white w-full" onClick={handleGenerateMessage}>
+              <Button
+                className="bg-primary text-white w-full"
+                onClick={() => {
+                  if (!msgAccountId || !msgProfileId) return;
+                  const text = buildMessage(msgAccountId, msgProfileId);
+                  setMsgText(text);
+                  if (!text) toast.error('No se pudo generar el mensaje.');
+                }}
+              >
                 <MessageSquare className="h-4 w-4 mr-2" />
-                Generar mensaje
+                Regenerar
               </Button>
               <Button
                 variant="outline"
@@ -515,13 +551,12 @@ export default function Sales() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Cards: 2 columnas en TELÉFONO para reducir scroll */}
+      {/* ✅ Cards: 2 columnas en TELÉFONO */}
       <div className="grid gap-3 sm:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3">
         {filteredAccounts.map((account: any) => {
           const realProfiles = (account.profiles ?? []) as any[];
           const totalSlots = Number(account.totalProfiles || 0);
 
-          // ✅ placeholders para mostrar SIEMPRE el total de slots
           const displayProfiles = Array.from({ length: totalSlots }, (_, idx) => {
             const p = realProfiles[idx];
             return (
@@ -551,8 +586,12 @@ export default function Sales() {
                 <CardHeader className="bg-white/5 border-b border-white/5 pb-2 sm:pb-3">
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0">
-                      <CardTitle className="text-base sm:text-lg text-white truncate">{account.serviceName}</CardTitle>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{account.email}</p>
+                      <CardTitle className="text-base sm:text-lg text-white truncate">
+                        {account.serviceName}
+                      </CardTitle>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+                        {account.email}
+                      </p>
                       {sold && (
                         <p className="text-[10px] sm:text-xs text-amber-300 mt-1 truncate">
                           Cuenta vendida {soldClient ? `a ${soldClient.name}` : ''}
@@ -571,12 +610,6 @@ export default function Sales() {
                 </CardHeader>
 
                 <CardContent className="pt-3 sm:pt-4 space-y-2 sm:space-y-3">
-                  {/* ✅ Aviso sutil (reemplaza el botón general) */}
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">
-                    Tip: toca un <span className="text-emerald-300">perfil activo</span> para generar el mensaje. Toca un
-                    <span className="text-white/80"> disponible</span> para vender.
-                  </p>
-
                   <div className="space-y-2">
                     <h4 className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Slots
@@ -585,10 +618,10 @@ export default function Sales() {
                     {/* ✅ Slots en 2 columnas SOLO en móvil */}
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
                       {displayProfiles.map((p: any) => {
-                        const canTapSale = !sold && p.status === 'disponible';
-                        const canTapMsg = !sold && p.status === 'activo';
-
-                        const isTap = canTapSale || canTapMsg;
+                        // ✅ Vender: solo cuando está disponible
+                        const canSell = !sold && p.status === 'disponible';
+                        // ✅ Mensaje: solo cuando está activo
+                        const canMsg = !sold && p.status === 'activo';
 
                         const nameClass =
                           p.status === 'activo'
@@ -600,58 +633,49 @@ export default function Sales() {
                         return (
                           <div
                             key={p.id}
-                            className={`flex items-center justify-between gap-2 p-1.5 sm:p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-xs sm:text-sm
-                              ${isTap ? 'cursor-pointer' : 'cursor-default opacity-90'}
-                              ${sold ? 'opacity-70' : ''}`}
+                            className={`p-1.5 sm:p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-xs sm:text-sm
+                              ${canSell || canMsg ? 'cursor-pointer' : 'cursor-default'} ${
+                              sold ? 'opacity-80' : ''
+                            }`}
                             onClick={() => {
                               if (sold) return;
 
-                              if (canTapSale) {
-                                // ✅ tap en DISPONIBLE => abrir modal venta
+                              // ✅ 1 toque en ACTIVO => mensaje automático
+                              if (canMsg) {
+                                openMessageForProfile(account.id, p.id);
+                                return;
+                              }
+
+                              // ✅ click en DISPONIBLE => venta
+                              if (canSell) {
                                 setSaleMode('perfil');
                                 setSelectedService(account.serviceName);
                                 setSelectedAccountId(account.id);
 
-                                const idToUse = p.__placeholder ? (realAvailable[0]?.id ?? '') : p.id;
-                                setSelectedProfileId(idToUse || '');
-                                setIsSellDialogOpen(true);
-                                return;
-                              }
+                                const idToUse = p.__placeholder ? realAvailable[0]?.id ?? '' : p.id;
+                                setSelectedProfileId(idToUse);
 
-                              if (canTapMsg) {
-                                // ✅ tap en ACTIVO => abrir modal mensaje (1 toque)
-                                openMessageDialogForProfile(account.id, p.id);
-                                return;
+                                setIsSellDialogOpen(true);
                               }
                             }}
                             title={
                               sold
                                 ? 'Cuenta vendida'
-                                : canTapMsg
+                                : canMsg
                                 ? 'Toca para generar mensaje'
-                                : canTapSale
+                                : canSell
                                 ? 'Toca para vender'
                                 : ''
                             }
                           >
-                            {/* ✅ Nombre siempre visible; en activo se pinta verde */}
-                            <span className={`truncate ${nameClass}`}>{p.name}</span>
-
-                            {/* ✅ Indicadores pequeños (sin ocupar espacio como badge grande) */}
-                            {p.status === 'activo' ? (
-                              <span className="text-[10px] sm:text-xs text-emerald-400">✓</span>
-                            ) : p.status === 'vencido' ? (
-                              <span className="text-[10px] sm:text-xs text-red-400">V</span>
-                            ) : (
-                              <span className="text-[10px] sm:text-xs text-muted-foreground">•</span>
-                            )}
+                            {/* ✅ Sin badges / sin checks: solo nombre con color */}
+                            <span className={`block truncate ${nameClass}`}>{p.name}</span>
                           </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Botones de venta */}
                   {!sold && availableCount > 0 && (
                     <Button
                       className="w-full h-8 sm:h-9 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary text-xs sm:text-sm"
@@ -698,4 +722,3 @@ export default function Sales() {
     </div>
   );
 }
-
