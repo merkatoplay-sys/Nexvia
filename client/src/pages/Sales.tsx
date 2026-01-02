@@ -107,7 +107,7 @@ export default function Sales() {
     if (service) setSelectedService(service);
 
     if (accountId) {
-      const exists = accountsSafe.some(a => a.id === accountId);
+      const exists = accountsSafe.some((a) => a.id === accountId);
       if (exists) setSelectedAccountId(accountId);
     }
 
@@ -118,16 +118,16 @@ export default function Sales() {
 
   const uniqueServices = useMemo(() => {
     return Array.from(
-      new Set(accountsSafe.map(a => a.serviceName).filter(s => s && String(s).trim()))
+      new Set(accountsSafe.map((a) => a.serviceName).filter((s) => s && String(s).trim()))
     );
   }, [accountsSafe]);
 
   const filteredAccounts = useMemo(() => {
-    return selectedService ? accountsSafe.filter(a => a.serviceName === selectedService) : accountsSafe;
+    return selectedService ? accountsSafe.filter((a) => a.serviceName === selectedService) : accountsSafe;
   }, [accountsSafe, selectedService]);
 
   const selectedAccount = useMemo(() => {
-    return accountsSafe.find(a => a.id === selectedAccountId);
+    return accountsSafe.find((a) => a.id === selectedAccountId);
   }, [accountsSafe, selectedAccountId]);
 
   const isAccountSold = (acc: any) => {
@@ -215,22 +215,19 @@ export default function Sales() {
   };
 
   const buildMessage = () => {
-    const acc = accountsSafe.find(a => a.id === msgAccountId);
+    const acc = accountsSafe.find((a) => a.id === msgAccountId);
     if (!acc) return '';
 
-    const tpl = (settings?.saleMessageTemplate && String(settings.saleMessageTemplate).trim())
-      ? String(settings.saleMessageTemplate)
-      : DEFAULT_SALE_MESSAGE_TPL;
+    const tpl =
+      settings?.saleMessageTemplate && String(settings.saleMessageTemplate).trim()
+        ? String(settings.saleMessageTemplate)
+        : DEFAULT_SALE_MESSAGE_TPL;
 
     const prof = msgProfileId
       ? (acc.profiles ?? []).find((p: any) => p.id === msgProfileId)
       : null;
 
-    const endDateRaw =
-      prof?.endDate ||
-      acc.soldEndDate ||
-      acc.expirationDate ||
-      '';
+    const endDateRaw = prof?.endDate || acc.soldEndDate || acc.expirationDate || '';
 
     const vars: Record<string, string> = {
       serviceName: String(acc.serviceName ?? ''),
@@ -260,7 +257,11 @@ export default function Sales() {
     }
   };
 
-  const msgAccount = useMemo(() => accountsSafe.find(a => a.id === msgAccountId), [accountsSafe, msgAccountId]);
+  const msgAccount = useMemo(
+    () => accountsSafe.find((a) => a.id === msgAccountId),
+    [accountsSafe, msgAccountId]
+  );
+
   const msgActiveProfiles = useMemo(() => {
     const list = (msgAccount?.profiles ?? []).filter((p: any) => p.status === 'activo');
     return list;
@@ -337,7 +338,7 @@ export default function Sales() {
                     <SelectValue placeholder="Selecciona un servicio" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
-                    {uniqueServices.map(service => (
+                    {uniqueServices.map((service) => (
                       <SelectItem key={service} value={service}>
                         {service}
                       </SelectItem>
@@ -407,7 +408,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="Juan Pérez"
                   value={saleData.name}
-                  onChange={e => setSaleData({ ...saleData, name: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, name: e.target.value })}
                 />
               </div>
 
@@ -417,7 +418,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="+502 5555 5555"
                   value={saleData.phone}
-                  onChange={e => setSaleData({ ...saleData, phone: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, phone: e.target.value })}
                 />
               </div>
 
@@ -427,7 +428,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="1234"
                   value={saleData.pin}
-                  onChange={e => setSaleData({ ...saleData, pin: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, pin: e.target.value })}
                 />
               </div>
 
@@ -438,7 +439,7 @@ export default function Sales() {
                   className="glass-input"
                   placeholder="Ej: 25"
                   value={saleData.price}
-                  onChange={e => setSaleData({ ...saleData, price: e.target.value })}
+                  onChange={(e) => setSaleData({ ...saleData, price: e.target.value })}
                 />
               </div>
 
@@ -449,7 +450,7 @@ export default function Sales() {
                     type="date"
                     className="glass-input"
                     value={saleData.startDate}
-                    onChange={e => setSaleData({ ...saleData, startDate: e.target.value })}
+                    onChange={(e) => setSaleData({ ...saleData, startDate: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -458,7 +459,7 @@ export default function Sales() {
                     type="date"
                     className="glass-input"
                     value={saleData.endDate}
-                    onChange={e => setSaleData({ ...saleData, endDate: e.target.value })}
+                    onChange={(e) => setSaleData({ ...saleData, endDate: e.target.value })}
                   />
                 </div>
               </div>
@@ -472,11 +473,7 @@ export default function Sales() {
               >
                 Cancelar
               </Button>
-              <Button
-                onClick={handleConfirm}
-                className="bg-primary text-white"
-                disabled={!canConfirm}
-              >
+              <Button onClick={handleConfirm} className="bg-primary text-white" disabled={!canConfirm}>
                 Confirmar Venta
               </Button>
             </DialogFooter>
@@ -510,16 +507,11 @@ export default function Sales() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
-                Genera el mensaje y luego lo copias.
-              </p>
+              <p className="text-[11px] text-muted-foreground">Genera el mensaje y luego lo copias.</p>
             </div>
 
             <div className="flex gap-2">
-              <Button
-                className="bg-primary text-white w-full"
-                onClick={handleGenerateMessage}
-              >
+              <Button className="bg-primary text-white w-full" onClick={handleGenerateMessage}>
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Generar mensaje
               </Button>
@@ -576,7 +568,6 @@ export default function Sales() {
           const sold = isAccountSold(account);
           const soldClient = sold ? clientsSafe.find((c: any) => c.id === account.soldClientId) : null;
 
-          // para escoger un perfil real disponible si existe
           const realAvailable = realProfiles.filter((p: any) => p.status === 'disponible');
           const availableCount = displayProfiles.filter((p: any) => p.status === 'disponible').length;
 
@@ -591,12 +582,8 @@ export default function Sales() {
                 <CardHeader className="bg-white/5 border-b border-white/5 pb-2 sm:pb-3">
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0">
-                      <CardTitle className="text-base sm:text-lg text-white truncate">
-                        {account.serviceName}
-                      </CardTitle>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                        {account.email}
-                      </p>
+                      <CardTitle className="text-base sm:text-lg text-white truncate">{account.serviceName}</CardTitle>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{account.email}</p>
                       {sold && (
                         <p className="text-[10px] sm:text-xs text-amber-300 mt-1 truncate">
                           Cuenta vendida {soldClient ? `a ${soldClient.name}` : ''}
@@ -604,7 +591,11 @@ export default function Sales() {
                       )}
                     </div>
 
-                    <div className={`text-right text-xs sm:text-sm font-bold ${availableCount > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div
+                      className={`text-right text-xs sm:text-sm font-bold ${
+                        availableCount > 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
                       {availableCount}/{totalSlots}
                     </div>
                   </div>
@@ -640,32 +631,38 @@ export default function Sales() {
                             onClick={() => {
                               if (!clickable) return;
 
-                              // Abrir modal de venta perfil por click en slot disponible
                               setSaleMode('perfil');
                               setSelectedService(account.serviceName);
                               setSelectedAccountId(account.id);
 
-                              if (p.status === 'disponible') {
-                                const idToUse = p.__placeholder ? (realAvailable[0]?.id ?? '') : p.id;
-                                setSelectedProfileId(idToUse);
-                              } else {
-                                setSelectedProfileId('');
-                              }
+                              const idToUse = p.__placeholder ? realAvailable[0]?.id ?? '' : p.id;
+                              setSelectedProfileId(idToUse);
 
                               setIsSellDialogOpen(true);
                             }}
-                            title={sold ? 'Cuenta vendida' : (clickable ? 'Click para vender' : '')}
+                            title={sold ? 'Cuenta vendida' : clickable ? 'Click para vender' : ''}
                           >
-                            <span className={`truncate ${p.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                            <span
+                              className={`truncate ${
+                                p.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
+                              }`}
+                            >
                               {p.name}
                             </span>
 
                             <div className="flex items-center gap-1">
                               {p.status === 'activo' ? (
                                 <>
-                                  <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                                  {/* ✅ EN MÓVIL: mostrar nombre en verde en vez de "Activo" */}
+                                  <span className="text-[9px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 truncate max-w-[90px] sm:hidden">
+                                    {String(p.name || 'Activo')}
+                                  </span>
+
+                                  {/* ✅ EN DESKTOP: etiqueta "Activo" */}
+                                  <span className="hidden sm:inline text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
                                     Activo
                                   </span>
+
                                   {/* ✅ Botón por perfil activo para mensaje inmediato */}
                                   <Button
                                     type="button"
