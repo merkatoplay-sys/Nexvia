@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Edit, RotateCw, Trash2, ChevronDown, ChevronUp, Users, Eye, EyeOff } from 'lucide-react';
+import { Edit, RotateCw, Trash2, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -17,17 +17,23 @@ function safeDate(value: any): Date | null {
   return d;
 }
 
+const money = (v: any) => {
+  if (v === null || v === undefined || v === '') return '—';
+  const n = Number(v);
+  if (Number.isNaN(n)) return '—';
+  return `$${n}`;
+};
+
 export default function Profiles() {
   const { accounts, clients, updateProfile, renewProfile, deleteProfile } = useStreaming();
 
-  // ✅ SAFE: evita crashes si vienen undefined
   const accountsSafe = accounts ?? [];
   const clientsSafe = clients ?? [];
 
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // ✅ price como string para evitar NaN y problemas de input controlado
+  // ✅ strings para inputs controlados (y permitir vacío)
   const [editData, setEditData] = useState({
     name: '',
     pin: '',
@@ -42,13 +48,6 @@ export default function Profiles() {
     profileId: string;
     name: string;
   }>({ open: false, accountId: '', profileId: '', name: '' });
-
-  // ✅ mostrar/ocultar PIN por perfil
-  const [pinVisible, setPinVisible] = useState<Record<string, boolean>>({});
-
-  const togglePin = (key: string) => {
-    setPinVisible(prev => ({ ...prev, [key]: !prev[key] }));
-  };
 
   const handleEdit = (profile: any, accountId: string) => {
     setEditingId(profile.id + accountId);
@@ -85,13 +84,25 @@ export default function Profiles() {
     return clientsSafe.find(c => c.id === clientId)?.name || 'Desconocido';
   };
 
-  // ✅ SAFE: account.profiles puede venir undefined
   const totalActiveProfiles = useMemo(() => {
     return accountsSafe.reduce((sum, a: any) => {
       const profiles = a?.profiles ?? [];
       return sum + profiles.filter((p: any) => p.status !== 'disponible').length;
     }, 0);
   }, [accountsSafe]);
+
+  const statusBadge = (daysLeft: number | null) => {
+    if (typeof daysLeft !== 'number') return <Badge className="bg-white/10 text-muted-foreground">Sin fecha</Badge>;
+
+    const cls =
+      daysLeft > 5
+        ? 'bg-emerald-500/20 text-emerald-400'
+        : daysLeft > 1
+        ? 'bg-yellow-500/20 text-yellow-400'
+        : 'bg-red-500/20 text-red-400';
+
+    return <Badge className={cls}>{daysLeft} día{daysLeft !== 1 ? 's' : ''}</Badge>;
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -136,9 +147,9 @@ export default function Profiles() {
                       className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-2 rounded transition-colors"
                       onClick={() => setExpandedAccount(isExpanded ? null : account.id)}
                     >
-                      <div className="flex items-center gap-3 flex-1">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm shrink-0"
                           style={{
                             backgroundColor:
                               account.serviceName === 'Netflix'
@@ -150,9 +161,9 @@ export default function Profiles() {
                         >
                           {String(account.serviceName ?? '').substring(0, 1)}
                         </div>
-                        <div>
-                          <CardTitle className="text-lg text-white">{account.serviceName}</CardTitle>
-                          <p className="text-xs text-muted-foreground">{account.email}</p>
+                        <div className="min-w-0">
+                          <CardTitle className="text-lg text-white truncate">{account.serviceName}</CardTitle>
+                          <p className="text-xs text-muted-foreground truncate">{account.email}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -169,12 +180,9 @@ export default function Profiles() {
                   </CardHeader>
 
                   {isExpanded && (
-                    <CardContent className="pt-4 space-y-4">
+                    <CardContent className="pt-4 space-y-3 sm:space-y-4">
                       {accountProfiles.map((profile: any) => {
-                        const key = `${account.id}_${profile.id}`;
                         const end = safeDate(profile.endDate);
-
-                        // ✅ NO crashea: si end es null, daysLeft = null
                         const daysLeft = end ? differenceInDays(end, new Date()) : null;
 
                         const canRenew = typeof daysLeft === 'number' && daysLeft <= 1;
@@ -185,151 +193,112 @@ export default function Profiles() {
                             key={profile.id}
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-4"
+                            className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/10 space-y-3"
                             data-testid={`card-profile-${profile.id}`}
                           >
-                            <div className="grid md:grid-cols-2 gap-4">
-                              <div className="space-y-3">
-                                {isEditing ? (
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">Nombre del Perfil</label>
-                                    <Input
-                                      className="glass-input"
-                                      value={editData.name}
-                                      onChange={e => setEditData({ ...editData, name: e.target.value })}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Nombre</p>
-                                    <p className="text-lg font-medium text-white">{profile.name}</p>
-                                  </div>
-                                )}
-
-                                {isEditing ? (
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">Teléfono</label>
-                                    <Input
-                                      className="glass-input"
-                                      value={editData.phone}
-                                      onChange={e => setEditData({ ...editData, phone: e.target.value })}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Teléfono</p>
-                                    <p className="text-sm text-white">{profile.phone || 'No especificado'}</p>
-                                  </div>
-                                )}
-
-                                {/* ✅ PIN visible (con toggle) */}
-                                {isEditing ? (
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">PIN</label>
-                                    <Input
-                                      className="glass-input"
-                                      value={editData.pin}
-                                      onChange={e => setEditData({ ...editData, pin: e.target.value })}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <p className="text-xs text-muted-foreground mb-1">PIN</p>
-                                      {profile.pin ? (
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          className="h-7 px-2 text-xs text-muted-foreground hover:text-white"
-                                          onClick={() => togglePin(key)}
-                                          title={pinVisible[key] ? 'Ocultar PIN' : 'Ver PIN'}
-                                        >
-                                          {pinVisible[key] ? (
-                                            <EyeOff className="h-4 w-4" />
-                                          ) : (
-                                            <Eye className="h-4 w-4" />
-                                          )}
-                                        </Button>
-                                      ) : null}
-                                    </div>
-
-                                    <p className="text-sm text-white">
-                                      {profile.pin ? (pinVisible[key] ? profile.pin : '••••') : 'No configurado'}
-                                    </p>
-                                  </div>
-                                )}
+                            {/* ✅ CABECERA COMPACTA */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-[10px] sm:text-xs text-muted-foreground">Perfil</p>
+                                <p className="text-sm sm:text-lg font-medium text-white truncate">
+                                  {isEditing ? 'Editando…' : profile.name}
+                                </p>
                               </div>
-
-                              <div className="space-y-3">
-                                {isEditing ? (
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">Cliente Asignado</label>
-
-                                    {/* ✅ FIX: Radix Select NO permite SelectItem con value="" */}
-                                    <Select
-                                      value={editData.clientId || "__none__"}
-                                      onValueChange={(val) =>
-                                        setEditData({ ...editData, clientId: val === "__none__" ? "" : val })
-                                      }
-                                    >
-                                      <SelectTrigger className="glass-input">
-                                        <SelectValue placeholder="Seleccionar cliente" />
-                                      </SelectTrigger>
-                                      <SelectContent className="bg-popover border-white/10 text-white">
-                                        <SelectItem value="__none__">Sin asignar</SelectItem>
-                                        {clientsSafe.map(c => (
-                                          <SelectItem key={c.id} value={c.id}>
-                                            {c.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                                    <p className="text-sm text-white">{getClientName(profile.clientId)}</p>
-                                  </div>
-                                )}
-
-                                {isEditing ? (
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">Precio</label>
-                                    <Input
-                                      type="number"
-                                      className="glass-input"
-                                      value={editData.price}
-                                      onChange={e => setEditData({ ...editData, price: e.target.value })}
-                                    />
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Precio</p>
-                                    <p className="text-sm font-medium text-white">${profile.price != null ? profile.price : 0}</p>
-                                  </div>
-                                )}
-
-                                <div>
-                                  <p className="text-xs text-muted-foreground mb-1">Estado</p>
-                                  {typeof daysLeft === 'number' ? (
-                                    <Badge
-                                      className={
-                                        daysLeft > 5
-                                          ? 'bg-emerald-500/20 text-emerald-400'
-                                          : daysLeft > 1
-                                          ? 'bg-yellow-500/20 text-yellow-400'
-                                          : 'bg-red-500/20 text-red-400'
-                                      }
-                                    >
-                                      {daysLeft} días
-                                    </Badge>
-                                  ) : (
-                                    <Badge className="bg-white/10 text-muted-foreground">Sin fecha</Badge>
-                                  )}
-                                </div>
-                              </div>
+                              <div className="shrink-0">{statusBadge(daysLeft)}</div>
                             </div>
 
+                            {/* ✅ CONTENIDO: MÁS COMPACTO (TEL: 2 columnas) */}
+                            {isEditing ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="col-span-2">
+                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Nombre</label>
+                                  <Input
+                                    className="glass-input h-9"
+                                    value={editData.name}
+                                    onChange={e => setEditData({ ...editData, name: e.target.value })}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Teléfono</label>
+                                  <Input
+                                    className="glass-input h-9"
+                                    value={editData.phone}
+                                    onChange={e => setEditData({ ...editData, phone: e.target.value })}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] sm:text-xs text-muted-foreground">PIN</label>
+                                  <Input
+                                    className="glass-input h-9"
+                                    value={editData.pin}
+                                    onChange={e => setEditData({ ...editData, pin: e.target.value })}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Precio</label>
+                                  <Input
+                                    type="number"
+                                    className="glass-input h-9"
+                                    placeholder="Ej: 25"
+                                    value={editData.price}
+                                    onChange={e => setEditData({ ...editData, price: e.target.value })}
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Cliente</label>
+                                  <Select
+                                    value={editData.clientId || '__none__'}
+                                    onValueChange={(val) =>
+                                      setEditData({ ...editData, clientId: val === '__none__' ? '' : val })
+                                    }
+                                  >
+                                    <SelectTrigger className="glass-input h-9">
+                                      <SelectValue placeholder="Seleccionar" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-white/10 text-white">
+                                      <SelectItem value="__none__">Sin asignar</SelectItem>
+                                      {clientsSafe.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>
+                                          {c.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="col-span-2 md:col-span-1">
+                                  <p className="text-[10px] sm:text-xs text-muted-foreground">Cliente</p>
+                                  <p className="text-xs sm:text-sm text-white truncate">{getClientName(profile.clientId)}</p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] sm:text-xs text-muted-foreground">Teléfono</p>
+                                  <p className="text-xs sm:text-sm text-white truncate">
+                                    {profile.phone || '—'}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] sm:text-xs text-muted-foreground">PIN</p>
+                                  <p className="text-xs sm:text-sm text-white font-mono">
+                                    {profile.pin || '—'}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] sm:text-xs text-muted-foreground">Precio</p>
+                                  <p className="text-xs sm:text-sm text-white font-medium">{money(profile.price)}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ✅ ACCIONES (compactas) */}
                             <div className="flex gap-2 flex-wrap pt-2 border-t border-white/5">
                               {isEditing ? (
                                 <>
@@ -337,7 +306,7 @@ export default function Profiles() {
                                     onClick={() => handleSave(account.id, profile.id)}
                                     className="bg-primary hover:bg-primary/90 text-white h-8 text-sm"
                                   >
-                                    Guardar Cambios
+                                    Guardar
                                   </Button>
                                   <Button
                                     onClick={() => setEditingId(null)}
