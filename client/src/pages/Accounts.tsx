@@ -1,4 +1,4 @@
-import { useStreaming, Account, ServiceType } from '@/context/StreamingContext';
+import { useStreaming, Account } from '@/context/StreamingContext';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Search, User, MonitorPlay, Trash2, Pencil, ArrowRightLeft, Eye, EyeOff } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { format, differenceInDays } from 'date-fns';
 import { motion } from 'framer-motion';
 
@@ -44,10 +44,10 @@ export default function Accounts() {
   const clientsSafe = clients ?? [];
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterService, setFilterService] = useState<string>('all');
+  const [filterService, setFilterService] = useState<string>('all'); // ahora guardamos serviceId
   const [isAddOpen, setIsAddOpen] = useState(false);
 
-  // ✅ mostrar/ocultar password
+  // mostrar/ocultar password
   const [showNewAccountPassword, setShowNewAccountPassword] = useState(false);
   const [showEditAccountPassword, setShowEditAccountPassword] = useState(false);
   const [showPasswordByAccount, setShowPasswordByAccount] = useState<Record<string, boolean>>({});
@@ -55,7 +55,7 @@ export default function Accounts() {
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: ProfileLike } | null>(null);
   const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
 
-  // ✅ ver/ocultar PIN dentro del modal de editar perfil
+  // ver/ocultar PIN dentro del modal de editar perfil
   const [showEditProfilePin, setShowEditProfilePin] = useState(false);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string; email: string }>({
@@ -65,13 +65,15 @@ export default function Accounts() {
     email: '',
   });
 
-  const [newAccount, setNewAccount] = useState<Partial<Account>>({
-    serviceName: 'Netflix',
+  // ✅ IMPORTANTE: ahora usamos serviceId (pero mantenemos serviceName por compatibilidad)
+  const [newAccount, setNewAccount] = useState<Partial<Account> & { serviceId?: string }>({
+    serviceId: '', // se setea cuando abre modal
+    serviceName: '', // fallback
     totalProfiles: 5,
     isRenewable: true,
   });
 
-  // ✅ Editar cuenta maestra
+  // Editar cuenta maestra
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const [editAccountData, setEditAccountData] = useState({
@@ -82,27 +84,79 @@ export default function Accounts() {
     isRenewable: true,
   });
 
-  // ✅ Mover perfiles
+  // Mover perfiles
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveFromAccount, setMoveFromAccount] = useState<any>(null);
   const [moveToAccountId, setMoveToAccountId] = useState<string>('');
   const [selectedMoveProfileIds, setSelectedMoveProfileIds] = useState<string[]>([]);
 
+  // ✅ resolver servicio por account (por ID, fallback por nombre para cuentas viejas)
+  const getServiceForAccount = (acc: any) => {
+    if (!acc) return null;
+    const byId = acc.serviceId ? servicesSafe.find((s: any) => s.id === acc.serviceId) : null;
+    if (byId) return byId;
+    if (acc.serviceName) return servicesSafe.find((s: any) => s.name === acc.serviceName) ?? null;
+    return null;
+  };
+
+  const getServiceForNewAccount = () => {
+    const byId = newAccount.serviceId ? servicesSafe.find((s: any) => s.id === newAccount.serviceId) : null;
+    if (byId) return byId;
+    if (newAccount.serviceName) return servicesSafe.find((s: any) => s.name === newAccount.serviceName) ?? null;
+    return null;
+  };
+
+  // ✅ cuando abres modal y no hay serviceId, asigna uno default
+  useEffect(() => {
+    if (!isAddOpen) return;
+    if (servicesSafe.length === 0) return;
+
+    setNewAccount((prev) => {
+      if (prev.serviceId) return prev;
+
+      const netflix = servicesSafe.find((s: any) => s.name === 'Netflix');
+      const first = netflix ?? servicesSafe[0];
+
+      return {
+        ...prev,
+        serviceId: first?.id ?? '',
+        serviceName: first?.name ?? '',
+      };
+    });
+  }, [isAddOpen, servicesSafe]);
+
   const filteredAccounts = useMemo(() => {
-    return accountsSafe.filter((acc) => {
+    return accountsSafe.filter((acc: any) => {
+      const service = getServiceForAccount(acc);
+      const serviceName = service?.name ?? acc.serviceName ?? '';
+
       const matchesSearch =
         (acc.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (acc.serviceName ?? '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesService = filterService === 'all' || acc.serviceName === filterService;
+        serviceName.toLowerCase().includes(searchTerm.toLowerCase());
+
+      // filtro por serviceId, con fallback por nombre para cuentas viejas
+      const matchesService =
+        filterService === 'all' ||
+        (acc.serviceId && acc.serviceId === filterService) ||
+        (!acc.serviceId && service?.id === filterService);
+
       return matchesSearch && matchesService;
     });
-  }, [accountsSafe, searchTerm, filterService]);
+  }, [accountsSafe, searchTerm, filterService, servicesSafe]);
 
   const handleAddAccount = async () => {
+    const svc = getServiceForNewAccount();
+    const serviceId = newAccount.serviceId || svc?.id || '';
+    const serviceName = svc?.name || newAccount.serviceName || '';
+
+    if (!serviceId || !serviceName) return;
     if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
 
     const success = await addAccount({
-      serviceName: (newAccount.serviceName as ServiceType) || 'Netflix',
+      // ✅ enviar ambos (serviceId + serviceName) para no romper hasta que migres backend
+      serviceId,
+      serviceName,
+
       email: newAccount.email || '',
       password: newAccount.password || '',
       totalProfiles: Number(newAccount.totalProfiles || 5),
@@ -117,7 +171,7 @@ export default function Accounts() {
     if (success) {
       setIsAddOpen(false);
       setShowNewAccountPassword(false);
-      setNewAccount({ serviceName: 'Netflix', totalProfiles: 5, isRenewable: true });
+      setNewAccount({ serviceId: '', serviceName: '', totalProfiles: 5, isRenewable: true });
     }
   };
 
@@ -140,27 +194,50 @@ export default function Accounts() {
     setSelectedMoveProfileIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  // ✅ candidates por serviceId si existe, fallback por serviceName si no
   const destinationCandidates = (accountsSafe ?? [])
-    .filter((a) => moveFromAccount && a.id !== moveFromAccount.id && a.serviceName === moveFromAccount.serviceName)
-    .map((a) => ({
+    .filter((a: any) => {
+      if (!moveFromAccount) return false;
+      if (a.id === moveFromAccount.id) return false;
+
+      if (moveFromAccount.serviceId && a.serviceId) return a.serviceId === moveFromAccount.serviceId;
+
+      // fallback viejo
+      return a.serviceName === moveFromAccount.serviceName;
+    })
+    .map((a: any) => ({
       ...a,
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
 
-  // ✅ helper: mandar a ventas con query
+  // helper: mandar a ventas con query (mantengo serviceName para que no rompas Sales por ahora)
   const goSellFromSlot = (serviceName: string, accountId: string, profile?: ProfileLike) => {
     const params = new URLSearchParams();
     params.set('mode', 'perfil');
     params.set('service', serviceName);
     params.set('accountId', accountId);
 
-    // SOLO mandamos profileId si es REAL, no placeholder
     if (profile && !profile.__placeholder && profile.status === 'disponible') {
       params.set('profileId', profile.id);
     }
 
     navigate(`/sales?${params.toString()}`);
   };
+
+  // helper imagen del servicio (varios nombres posibles para no fallar)
+  const getServiceImage = (svc: any): string => {
+    if (!svc) return '';
+    return (
+      svc.imageUrl ||
+      svc.iconUrl ||
+      svc.image ||
+      svc.logoUrl ||
+      ''
+    );
+  };
+
+  const newSvc = getServiceForNewAccount();
+  const maxProfilesLabel = getMaxProfilesByService?.((newSvc?.name || newAccount.serviceName || 'Netflix') as any) ?? 5;
 
   return (
     <div className="space-y-8">
@@ -189,18 +266,27 @@ export default function Accounts() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Servicio</label>
+
+                  {/* ✅ Select usa service.id */}
                   <Select
-                    onValueChange={(val) => setNewAccount({ ...newAccount, serviceName: val as ServiceType })}
-                    value={(newAccount.serviceName as string) || 'Netflix'}
+                    onValueChange={(val) => {
+                      const svc = servicesSafe.find((s: any) => s.id === val);
+                      setNewAccount({
+                        ...newAccount,
+                        serviceId: val,
+                        serviceName: svc?.name ?? '',
+                      });
+                    }}
+                    value={newAccount.serviceId || ''}
                   >
                     <SelectTrigger className="glass-input" data-testid="select-service">
                       <SelectValue placeholder="Servicio" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {servicesSafe
-                        .filter((s) => s.name && s.name.trim())
-                        .map((s) => (
-                          <SelectItem key={s.id} value={s.name}>
+                        .filter((s: any) => s.name && s.name.trim())
+                        .map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>
                             {s.name}
                           </SelectItem>
                         ))}
@@ -209,15 +295,13 @@ export default function Accounts() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">
-                    Perfiles (Máx: {getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')})
-                  </label>
+                  <label className="text-xs text-muted-foreground">Perfiles (Máx: {maxProfilesLabel})</label>
                   <Input
                     type="number"
                     className="glass-input"
                     value={newAccount.totalProfiles}
                     onChange={(e) => setNewAccount({ ...newAccount, totalProfiles: parseInt(e.target.value || '0') })}
-                    max={getMaxProfilesByService((newAccount.serviceName as ServiceType) || 'Netflix')}
+                    max={maxProfilesLabel}
                     data-testid="input-profiles"
                   />
                 </div>
@@ -277,7 +361,10 @@ export default function Accounts() {
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select value={(newAccount.isRenewable ?? true) ? 'si' : 'no'} onValueChange={(val) => setNewAccount({ ...newAccount, isRenewable: val === 'si' })}>
+                  <Select
+                    value={(newAccount.isRenewable ?? true) ? 'si' : 'no'}
+                    onValueChange={(val) => setNewAccount({ ...newAccount, isRenewable: val === 'si' })}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Selecciona" />
                     </SelectTrigger>
@@ -305,9 +392,16 @@ export default function Accounts() {
       <div className="flex gap-4 items-center bg-card/40 p-4 rounded-lg border border-white/5 backdrop-blur-sm">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9 glass-input bg-background/20" placeholder="Buscar por email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} data-testid="input-search" />
+          <Input
+            className="pl-9 glass-input bg-background/20"
+            placeholder="Buscar por email o servicio..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            data-testid="input-search"
+          />
         </div>
 
+        {/* ✅ filtro por serviceId */}
         <Select value={filterService} onValueChange={setFilterService}>
           <SelectTrigger className="w-[180px] glass-input bg-background/20" data-testid="select-filter">
             <SelectValue placeholder="Filtrar Servicio" />
@@ -315,9 +409,9 @@ export default function Accounts() {
           <SelectContent className="bg-popover border-white/10 text-white">
             <SelectItem value="all">Todos</SelectItem>
             {servicesSafe
-              .filter((s) => s.name && s.name.trim())
-              .map((s) => (
-                <SelectItem key={s.id} value={s.name}>
+              .filter((s: any) => s.name && s.name.trim())
+              .map((s: any) => (
+                <SelectItem key={s.id} value={s.id}>
                   {s.name}
                 </SelectItem>
               ))}
@@ -348,12 +442,15 @@ export default function Accounts() {
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {filteredAccounts.map((account: any) => {
             const daysLeft = differenceInDays(new Date(account.expirationDate), new Date());
-            const serviceColor = (getServiceColor?.(account.serviceName) as string) || '#6366f1';
+
+            const svc = getServiceForAccount(account);
+            const serviceName = svc?.name ?? account.serviceName ?? 'Servicio';
+            const serviceColor = svc?.color ?? (getServiceColor?.(serviceName) as string) ?? '#6366f1';
+            const serviceImage = getServiceImage(svc);
 
             const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
             const totalSlots = Number(account.totalProfiles || 0);
 
-            // ✅ placeholders SIEMPRE
             const displayProfiles: ProfileLike[] = Array.from({ length: totalSlots }, (_, idx) => {
               const p = realProfiles[idx];
               return (
@@ -369,22 +466,43 @@ export default function Accounts() {
             const activeCount = (realProfiles ?? []).filter((p: any) => p.status === 'activo').length;
 
             return (
-              <motion.div key={account.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
+              <motion.div
+                key={account.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2 }}
+              >
                 <Card className="glass-card overflow-hidden group hover:border-primary/30 transition-all duration-300">
                   <CardHeader className="bg-white/5 border-b border-white/5 pb-3">
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-white shadow-lg shrink-0" style={{ backgroundColor: serviceColor }}>
-                          {String(account.serviceName || '').substring(0, 1)}
+                        <div
+                          className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center font-bold text-white shadow-lg shrink-0"
+                          style={{ backgroundColor: serviceColor }}
+                        >
+                          {serviceImage ? (
+                            <img
+                              src={serviceImage}
+                              alt={serviceName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <span>{String(serviceName).substring(0, 1)}</span>
+                          )}
                         </div>
+
                         <div className="min-w-0">
-                          <CardTitle className="text-lg text-white">{account.serviceName}</CardTitle>
+                          <CardTitle className="text-lg text-white">{serviceName}</CardTitle>
 
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
 
-                          {/* ✅ Mostrar password debajo del correo (oculto por defecto) */}
                           <div className="flex items-center gap-2 mt-1">
-                            <p className="text-xs text-muted-foreground truncate">{showPasswordByAccount[account.id] ? (account.password || '') : '••••••••'}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {showPasswordByAccount[account.id] ? (account.password || '') : '••••••••'}
+                            </p>
 
                             <Button
                               type="button"
@@ -406,7 +524,10 @@ export default function Accounts() {
                       </div>
 
                       <div className="flex flex-col items-end gap-2 shrink-0">
-                        <Badge variant={daysLeft < 3 ? 'destructive' : 'default'} className={daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}>
+                        <Badge
+                          variant={daysLeft < 3 ? 'destructive' : 'default'}
+                          className={daysLeft >= 3 ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30' : ''}
+                        >
                           {daysLeft} días
                         </Badge>
 
@@ -452,7 +573,7 @@ export default function Accounts() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.serviceName, email: account.email })}
+                            onClick={() => setDeleteConfirm({ open: true, id: account.id, name: serviceName, email: account.email })}
                             className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
                             title="Eliminar"
                           >
@@ -501,14 +622,16 @@ export default function Accounts() {
                             }
 
                             if (profile.status === 'disponible') {
-                              goSellFromSlot(account.serviceName, account.id, profile);
+                              goSellFromSlot(serviceName, account.id, profile);
                             }
                           }}
                           title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <User className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
-                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>{profile.name}</span>
+                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                              {profile.name}
+                            </span>
                           </div>
 
                           {profile.status === 'activo' ? (
@@ -548,7 +671,6 @@ export default function Accounts() {
                 <Input className="glass-input" value={editData.phone} onChange={(e) => setEditData({ ...editData, phone: e.target.value })} />
               </div>
 
-              {/* ✅ PIN visible con toggle */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">PIN</label>
                 <div className="relative">
@@ -573,8 +695,6 @@ export default function Accounts() {
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Cliente</label>
-
-                {/* ✅ FIX: Radix Select NO permite SelectItem con value="" */}
                 <Select
                   value={editData.clientId?.trim() ? editData.clientId : "__none__"}
                   onValueChange={(val) => setEditData({ ...editData, clientId: val === "__none__" ? "" : val })}
@@ -595,16 +715,17 @@ export default function Accounts() {
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Precio</label>
-                <Input type="number" className="glass-input" value={editData.price} onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value || '0') })} />
+                <Input
+                  type="number"
+                  className="glass-input"
+                  value={editData.price}
+                  onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value || '0') })}
+                />
               </div>
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setEditingProfile(null)}
-                className="border-white/10 hover:bg-white/5 text-white"
-              >
+              <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">
                 Cancelar
               </Button>
               <Button
@@ -627,7 +748,7 @@ export default function Accounts() {
         </Dialog>
       )}
 
-      {/* Editar cuenta maestra */}
+      {/* Editar cuenta maestra (igual que tu código) */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
         <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
@@ -731,7 +852,9 @@ export default function Accounts() {
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
         <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>Mover perfiles {moveFromAccount ? `(${moveFromAccount.serviceName})` : ''}</DialogTitle>
+            <DialogTitle>
+              Mover perfiles {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
+            </DialogTitle>
           </DialogHeader>
 
           {!moveFromAccount ? (
