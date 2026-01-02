@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Search, User, MonitorPlay, Trash2, Pencil, ArrowRightLeft, Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
-import { format, differenceInDays } from 'date-fns';
+import { format, differenceInDays, parse, isValid } from 'date-fns';
 import { motion } from 'framer-motion';
 
 type ProfileLike = {
@@ -66,11 +66,13 @@ export default function Accounts() {
   });
 
   // ✅ IMPORTANTE: usamos serviceId (pero mantenemos serviceName por compat)
-  const [newAccount, setNewAccount] = useState<Partial<Account> & { serviceId?: string }>({
+  // ✅ expirationDate en formato dd/MM/yyyy para el input
+  const [newAccount, setNewAccount] = useState<Partial<Account> & { serviceId?: string; expirationDate?: string }>({
     serviceId: '',
     serviceName: '',
     totalProfiles: 5,
     isRenewable: true,
+    expirationDate: '',
   });
 
   // Editar cuenta maestra
@@ -79,7 +81,7 @@ export default function Accounts() {
   const [editAccountData, setEditAccountData] = useState({
     email: '',
     password: '',
-    expirationDate: '',
+    expirationDate: '', // dd/MM/yyyy
     cost: 0,
     isRenewable: true,
   });
@@ -152,6 +154,17 @@ export default function Accounts() {
     if (!serviceId || !serviceName) return;
     if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
 
+    // ✅ vencimiento dd/MM/yyyy -> ISO (si está vacío: +30 días)
+    let expISO: string;
+    if (newAccount.expirationDate?.trim()) {
+      const parsed = parse(newAccount.expirationDate.trim(), 'dd/MM/yyyy', new Date());
+      if (!isValid(parsed)) return;
+      parsed.setHours(0, 0, 0, 0);
+      expISO = parsed.toISOString();
+    } else {
+      expISO = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    }
+
     const success = await addAccount({
       // ✅ enviar ambos
       serviceId,
@@ -161,7 +174,7 @@ export default function Accounts() {
       password: newAccount.password || '',
       totalProfiles: Number(newAccount.totalProfiles || 5),
       startDate: new Date().toISOString(),
-      expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      expirationDate: expISO,
       isRenewable: newAccount.isRenewable ?? true,
       cost: Number(newAccount.cost) || 0,
       pricePerProfile: 0,
@@ -171,7 +184,7 @@ export default function Accounts() {
     if (success) {
       setIsAddOpen(false);
       setShowNewAccountPassword(false);
-      setNewAccount({ serviceId: '', serviceName: '', totalProfiles: 5, isRenewable: true });
+      setNewAccount({ serviceId: '', serviceName: '', totalProfiles: 5, isRenewable: true, expirationDate: '' });
     }
   };
 
@@ -355,6 +368,19 @@ export default function Accounts() {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                  <Input
+                    type="text"
+                    className="glass-input"
+                    placeholder="31/01/2026"
+                    value={newAccount.expirationDate || ''}
+                    onChange={(e) => setNewAccount({ ...newAccount, expirationDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
                   <Select
                     value={(newAccount.isRenewable ?? true) ? 'si' : 'no'}
@@ -369,11 +395,17 @@ export default function Accounts() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div />
               </div>
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+              <Button
+                variant="outline"
+                onClick={() => setIsAddOpen(false)}
+                className="border-white/10 hover:bg-white/5 text-white"
+              >
                 Cancelar
               </Button>
               <Button onClick={handleAddAccount} className="bg-primary text-white" data-testid="button-save-account">
@@ -418,7 +450,9 @@ export default function Accounts() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <MonitorPlay className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">No hay cuentas maestras</h3>
-            <p className="text-muted-foreground text-center mb-6">Registra tu primera cuenta de streaming para comenzar a distribuir perfiles.</p>
+            <p className="text-muted-foreground text-center mb-6">
+              Registra tu primera cuenta de streaming para comenzar a distribuir perfiles.
+            </p>
             <Button onClick={() => setIsAddOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
               <Plus className="mr-2 h-4 w-4" /> Agregar Cuenta
             </Button>
@@ -517,7 +551,11 @@ export default function Accounts() {
                               }
                               title={showPasswordByAccount[account.id] ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                             >
-                              {showPasswordByAccount[account.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                              {showPasswordByAccount[account.id] ? (
+                                <EyeOff className="h-3 w-3" />
+                              ) : (
+                                <Eye className="h-3 w-3" />
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -560,7 +598,9 @@ export default function Accounts() {
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
-                                expirationDate: format(new Date(account.expirationDate), 'yyyy-MM-dd'),
+                                expirationDate: account.expirationDate
+                                  ? format(new Date(account.expirationDate), 'dd/MM/yyyy')
+                                  : '',
                                 cost: Number(account.cost || 0),
                                 isRenewable: !!account.isRenewable,
                               });
@@ -573,7 +613,9 @@ export default function Accounts() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setDeleteConfirm({ open: true, id: account.id, name: serviceName, email: account.email })}
+                            onClick={() =>
+                              setDeleteConfirm({ open: true, id: account.id, name: serviceName, email: account.email })
+                            }
                             className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
                             title="Eliminar"
                           >
@@ -588,16 +630,22 @@ export default function Accounts() {
                     <div className="grid grid-cols-2 gap-2 mb-4">
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Inicio</span>
-                        <span className="text-xs font-medium text-white">{format(new Date(account.startDate), 'dd MMM')}</span>
+                        <span className="text-xs font-medium text-white">
+                          {format(new Date(account.startDate), 'dd MMM')}
+                        </span>
                       </div>
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Vence</span>
-                        <span className="text-xs font-medium text-white">{format(new Date(account.expirationDate), 'dd MMM')}</span>
+                        <span className="text-xs font-medium text-white">
+                          {format(new Date(account.expirationDate), 'dd MMM')}
+                        </span>
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Perfiles</h4>
+                      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Perfiles
+                      </h4>
 
                       {displayProfiles.map((profile) => (
                         <div
@@ -629,16 +677,28 @@ export default function Accounts() {
                           title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <User className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
-                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                            <User
+                              className={`h-3 w-3 shrink-0 ${
+                                profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
+                              }`}
+                            />
+                            <span
+                              className={`truncate ${
+                                profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
+                              }`}
+                            >
                               {profile.name}
                             </span>
                           </div>
 
                           {profile.status === 'activo' ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">Activo</Badge>
+                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
+                              Activo
+                            </Badge>
                           ) : profile.status === 'vencido' ? (
-                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">Vencido</Badge>
+                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
+                              Vencido
+                            </Badge>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">Disponible</span>
                           )}
@@ -656,7 +716,10 @@ export default function Accounts() {
       {/* Editar perfil */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogContent
+            className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
+            aria-describedby={undefined}
+          >
             <DialogHeader>
               <DialogTitle>Editar Perfil: {editingProfile.profile.name}</DialogTitle>
             </DialogHeader>
@@ -664,12 +727,20 @@ export default function Accounts() {
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Nombre</label>
-                <Input className="glass-input" value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} />
+                <Input
+                  className="glass-input"
+                  value={editData.name}
+                  onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Teléfono</label>
-                <Input className="glass-input" value={editData.phone} onChange={(e) => setEditData({ ...editData, phone: e.target.value })} />
+                <Input
+                  className="glass-input"
+                  value={editData.phone}
+                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
@@ -697,8 +768,8 @@ export default function Accounts() {
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Cliente</label>
                 <Select
-                  value={editData.clientId?.trim() ? editData.clientId : "__none__"}
-                  onValueChange={(val) => setEditData({ ...editData, clientId: val === "__none__" ? "" : val })}
+                  value={editData.clientId?.trim() ? editData.clientId : '__none__'}
+                  onValueChange={(val) => setEditData({ ...editData, clientId: val === '__none__' ? '' : val })}
                 >
                   <SelectTrigger className="glass-input">
                     <SelectValue placeholder="Seleccionar cliente" />
@@ -726,7 +797,11 @@ export default function Accounts() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">
+              <Button
+                variant="outline"
+                onClick={() => setEditingProfile(null)}
+                className="border-white/10 hover:bg-white/5 text-white"
+              >
                 Cancelar
               </Button>
               <Button
@@ -751,7 +826,10 @@ export default function Accounts() {
 
       {/* Editar cuenta maestra */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent
+          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>Editar Cuenta</DialogTitle>
           </DialogHeader>
@@ -762,7 +840,13 @@ export default function Accounts() {
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Email</label>
-                <Input className="glass-input" value={editAccountData.email} onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })} autoComplete="off" name="serviceEmailEdit" />
+                <Input
+                  className="glass-input"
+                  value={editAccountData.email}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })}
+                  autoComplete="off"
+                  name="serviceEmailEdit"
+                />
               </div>
 
               <div className="space-y-2">
@@ -791,13 +875,22 @@ export default function Accounts() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Vence (fecha)</label>
-                  <Input type="date" className="glass-input" value={editAccountData.expirationDate} onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: e.target.value })} />
+                  <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                  <Input
+                    type="text"
+                    className="glass-input"
+                    placeholder="31/01/2026"
+                    value={editAccountData.expirationDate}
+                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: e.target.value })}
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select value={editAccountData.isRenewable ? 'si' : 'no'} onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}>
+                  <Select
+                    value={editAccountData.isRenewable ? 'si' : 'no'}
+                    onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue />
                     </SelectTrigger>
@@ -811,14 +904,25 @@ export default function Accounts() {
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Costo (informativo)</label>
-                <Input type="number" className="glass-input" value={editAccountData.cost} onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })} />
-                <p className="text-[11px] text-muted-foreground">Nota: cambiar el costo aquí NO cambia el gasto histórico (eso queda en transacciones).</p>
+                <Input
+                  type="number"
+                  className="glass-input"
+                  value={editAccountData.cost}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Nota: cambiar el costo aquí NO cambia el gasto histórico (eso queda en transacciones).
+                </p>
               </div>
             </div>
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditAccountOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+            <Button
+              variant="outline"
+              onClick={() => setEditAccountOpen(false)}
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
               Cancelar
             </Button>
             <Button
@@ -827,7 +931,14 @@ export default function Accounts() {
               onClick={async () => {
                 if (!editingAccount) return;
 
-                const expISO = editAccountData.expirationDate ? new Date(`${editAccountData.expirationDate}T00:00:00`).toISOString() : undefined;
+                // ✅ dd/MM/yyyy -> ISO (si es inválida, no guarda)
+                let expISO: string | undefined = undefined;
+                if (editAccountData.expirationDate?.trim()) {
+                  const parsed = parse(editAccountData.expirationDate.trim(), 'dd/MM/yyyy', new Date());
+                  if (!isValid(parsed)) return;
+                  parsed.setHours(0, 0, 0, 0);
+                  expISO = parsed.toISOString();
+                }
 
                 const ok = await updateAccount(
                   editingAccount.id,
@@ -851,10 +962,14 @@ export default function Accounts() {
 
       {/* Mover perfiles */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent
+          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>
-              Mover perfiles {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
+              Mover perfiles{' '}
+              {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -888,16 +1003,39 @@ export default function Accounts() {
                 <label className="text-xs text-muted-foreground">Seleccionar perfiles a mover</label>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(1)} disabled={activeProfilesOfFrom.length < 1}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                    onClick={() => selectFirstN(1)}
+                    disabled={activeProfilesOfFrom.length < 1}
+                  >
                     1
                   </Button>
-                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(2)} disabled={activeProfilesOfFrom.length < 2}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                    onClick={() => selectFirstN(2)}
+                    disabled={activeProfilesOfFrom.length < 2}
+                  >
                     2
                   </Button>
-                  <Button type="button" variant="outline" className="border-white/10 hover:bg-white/5 text-white h-8 text-xs" onClick={() => selectFirstN(3)} disabled={activeProfilesOfFrom.length < 3}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+                    onClick={() => selectFirstN(3)}
+                    disabled={activeProfilesOfFrom.length < 3}
+                  >
                     3
                   </Button>
-                  <Button type="button" className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs" onClick={selectAll} disabled={activeProfilesOfFrom.length === 0}>
+                  <Button
+                    type="button"
+                    className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs"
+                    onClick={selectAll}
+                    disabled={activeProfilesOfFrom.length === 0}
+                  >
                     Todos
                   </Button>
                 </div>
@@ -911,7 +1049,12 @@ export default function Accounts() {
                       </div>
 
                       <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-                        <input type="checkbox" checked={selectedMoveProfileIds.includes(p.id)} onChange={() => toggleSelect(p.id)} className="h-4 w-4 accent-violet-500" />
+                        <input
+                          type="checkbox"
+                          checked={selectedMoveProfileIds.includes(p.id)}
+                          onChange={() => toggleSelect(p.id)}
+                          className="h-4 w-4 accent-violet-500"
+                        />
                         Seleccionar
                       </label>
                     </div>
@@ -926,7 +1069,11 @@ export default function Accounts() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setMoveOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+            <Button
+              variant="outline"
+              onClick={() => setMoveOpen(false)}
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
               Cancelar
             </Button>
 
