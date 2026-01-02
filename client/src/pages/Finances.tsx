@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useStreaming } from '@/context/StreamingContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, DollarSign, AlertCircle, Ban } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
+import { TrendingUp, TrendingDown, DollarSign, AlertCircle, Ban } from 'lucide-react';
 
+import { useStreaming } from '@/context/StreamingContext';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -29,6 +29,8 @@ type Tx = {
   voidedAt?: string | null;
   voidReason?: string | null;
 };
+
+const money = (n: any) => Number(n ?? 0).toFixed(2);
 
 function TxCard({
   exp,
@@ -58,13 +60,7 @@ function TxCard({
         : 'text-amber-400';
 
   return (
-    <div
-      className={[
-        'p-3 rounded-lg border',
-        bg,
-        isVoided ? 'opacity-60' : '',
-      ].join(' ')}
-    >
+    <div className={['p-3 rounded-lg border', bg, isVoided ? 'opacity-60' : ''].join(' ')}>
       <div className="flex justify-between items-start gap-3">
         <div className="flex-1">
           <div className="flex items-center gap-2">
@@ -81,9 +77,7 @@ function TxCard({
             {format(new Date(exp.date), 'dd MMM yyyy HH:mm')}
           </p>
 
-          {exp.reference && (
-            <p className="text-xs text-muted-foreground">Ref: {exp.reference}</p>
-          )}
+          {exp.reference && <p className="text-xs text-muted-foreground">Ref: {exp.reference}</p>}
 
           {isVoided && (
             <div className="mt-2 text-xs text-muted-foreground space-y-1">
@@ -104,8 +98,7 @@ function TxCard({
 
         <div className="flex flex-col items-end gap-2">
           <p className={`text-sm font-bold ${amountColor}`}>
-            {sign}
-            ${exp.amount}
+            {sign}${money(exp.amount)}
           </p>
 
           <Button
@@ -161,10 +154,7 @@ export default function Finances() {
     if (selectedTx.isVoided) return;
 
     const reason = voidReason.trim();
-    if (!reason) {
-      // si prefieres permitir vacío, quita este if
-      return;
-    }
+    if (!reason) return;
 
     try {
       setSaving(true);
@@ -193,8 +183,12 @@ export default function Finances() {
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-display text-emerald-400">${stats.totalSales}</div>
-                <p className="text-xs text-muted-foreground mt-1">{ganancias.filter(g => !g.isVoided).length} transacciones (válidas)</p>
+                <div className="text-2xl font-bold font-display text-emerald-400">
+                  ${money(stats.totalSales)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ganancias.filter(g => !g.isVoided).length} transacciones (válidas)
+                </p>
               </CardContent>
             </Card>
           </motion.div>
@@ -206,8 +200,12 @@ export default function Finances() {
                 <TrendingDown className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold font-display text-red-400">${stats.totalExpenses}</div>
-                <p className="text-xs text-muted-foreground mt-1">{gastos.filter(g => !g.isVoided).length} transacciones (válidas)</p>
+                <div className="text-2xl font-bold font-display text-red-400">
+                  ${money(stats.totalExpenses)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {gastos.filter(g => !g.isVoided).length} transacciones (válidas)
+                </p>
               </CardContent>
             </Card>
           </motion.div>
@@ -219,10 +217,8 @@ export default function Finances() {
                 <DollarSign className="h-4 w-4 text-primary" />
               </CardHeader>
               <CardContent>
-                <div
-                  className={`text-2xl font-bold font-display ${stats.netProfit >= 0 ? 'text-white neon-text' : 'text-red-400'}`}
-                >
-                  ${stats.netProfit}
+                <div className={`text-2xl font-bold font-display ${stats.netProfit >= 0 ? 'text-white neon-text' : 'text-red-400'}`}>
+                  ${money(stats.netProfit)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   Margen {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%
@@ -318,7 +314,6 @@ export default function Finances() {
         </div>
       </motion.div>
 
-      {/* ✅ Modal anular */}
       <Dialog open={openVoid} onOpenChange={setOpenVoid}>
         <DialogContent className="glass-card border-white/10">
           <DialogHeader>
@@ -335,11 +330,13 @@ export default function Finances() {
               <div className="flex justify-between gap-3">
                 <div className="flex-1">
                   <p className="text-white font-medium">{selectedTx.description}</p>
-                  <p className="text-xs text-muted-foreground">{format(new Date(selectedTx.date), 'dd MMM yyyy HH:mm')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(selectedTx.date), 'dd MMM yyyy HH:mm')}
+                  </p>
                 </div>
                 <p className="text-white/90 font-bold">
                   {selectedTx.type === 'ganancia' ? '+' : selectedTx.type === 'gasto' ? '-' : ''}
-                  ${selectedTx.amount}
+                  ${money(selectedTx.amount)}
                 </p>
               </div>
             </div>

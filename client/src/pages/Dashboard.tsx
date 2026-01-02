@@ -7,6 +7,9 @@ import { Users, DollarSign, TrendingUp, AlertTriangle, RotateCw, ShoppingCart } 
 import { motion } from 'framer-motion';
 import { differenceInDays } from 'date-fns';
 
+const money = (v: any) =>
+  `$${Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 export default function Dashboard() {
   const { getStats, accounts, renewAccount, renewProfile, getServiceColor } = useStreaming();
   const [, navigate] = useLocation();
@@ -14,27 +17,18 @@ export default function Dashboard() {
 
   const container = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } },
   };
 
-  const item = {
-    hidden: { y: 20, opacity: 0 },
-    show: { y: 0, opacity: 1 }
-  };
+  const item = { hidden: { y: 20, opacity: 0 }, show: { y: 0, opacity: 1 } };
 
-  // Encontrar cuentas y perfiles por vencer
   const expiringSoonAccounts = accounts.filter(acc => {
     const days = differenceInDays(new Date(acc.expirationDate), new Date());
     return days <= 3 && days >= 0;
   });
 
-  const expiringSoonProfiles = accounts.flatMap(acc => 
-    acc.profiles
+  const expiringSoonProfiles = accounts.flatMap(acc =>
+    (acc.profiles ?? [])
       .filter(p => p.status === 'activo' && p.endDate)
       .filter(p => {
         const days = differenceInDays(new Date(p.endDate!), new Date());
@@ -44,18 +38,13 @@ export default function Dashboard() {
   );
 
   return (
-    <motion.div 
-      variants={container}
-      initial="hidden"
-      animate="show"
-      className="space-y-8"
-    >
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-white mb-2">Dashboard</h1>
           <p className="text-muted-foreground">Bienvenido de nuevo. Aquí está el resumen de tu negocio.</p>
         </div>
-        <Button 
+        <Button
           onClick={() => navigate('/sales')}
           className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]"
         >
@@ -63,7 +52,6 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <motion.div variants={item}>
           <Card className="glass-card hover:bg-card/80 transition-colors">
@@ -72,7 +60,7 @@ export default function Dashboard() {
               <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-white">${stats.totalSales}</div>
+              <div className="text-2xl font-bold font-display text-white">{money(stats.totalSales)}</div>
               <p className="text-xs text-muted-foreground mt-1">Por venta de perfiles</p>
             </CardContent>
           </Card>
@@ -85,8 +73,10 @@ export default function Dashboard() {
               <TrendingUp className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-emerald-500 neon-text">${stats.netProfit}</div>
-              <p className="text-xs text-muted-foreground mt-1">Margen actual del {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%</p>
+              <div className="text-2xl font-bold font-display text-emerald-500 neon-text">{money(stats.netProfit)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Margen actual del {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -111,16 +101,16 @@ export default function Dashboard() {
               <AlertTriangle className="h-4 w-4 text-orange-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold font-display text-orange-500">{expiringSoonAccounts.length + expiringSoonProfiles.length}</div>
+              <div className="text-2xl font-bold font-display text-orange-500">
+                {expiringSoonAccounts.length + expiringSoonProfiles.length}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">En los próximos 3 días</p>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Cuentas y Perfiles por Vencer */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Cuentas Maestras por Vencer */}
         <motion.div variants={item}>
           <Card className="glass-card">
             <CardHeader>
@@ -137,7 +127,7 @@ export default function Dashboard() {
                     <div key={acc.id} className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
-                          <div 
+                          <div
                             className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
                             style={{ backgroundColor: getServiceColor(acc.serviceName) }}
                           >
@@ -169,7 +159,6 @@ export default function Dashboard() {
           </Card>
         </motion.div>
 
-        {/* Perfiles por Vencer */}
         <motion.div variants={item}>
           <Card className="glass-card">
             <CardHeader>
@@ -182,8 +171,11 @@ export default function Dashboard() {
                 <p className="text-muted-foreground text-sm">Todos los perfiles están vigentes</p>
               ) : (
                 <div className="space-y-3">
-                  {expiringSoonProfiles.map((profile, idx) => (
-                    <div key={`${profile.accountId}-${profile.id}`} className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                  {expiringSoonProfiles.map(profile => (
+                    <div
+                      key={`${profile.accountId}-${profile.id}`}
+                      className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20"
+                    >
                       <div className="flex items-center justify-between mb-2">
                         <div>
                           <p className="text-sm font-medium text-white">{profile.name}</p>
@@ -211,7 +203,6 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      {/* Cuentas Recientes */}
       <motion.div variants={item}>
         <Card className="glass-card">
           <CardHeader>
@@ -220,9 +211,13 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               {accounts.slice(0, 5).map(acc => (
-                <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 transition-colors" onClick={() => navigate(`/account/${acc.id}`)}>
+                <div
+                  key={acc.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 transition-colors"
+                  onClick={() => navigate(`/account/${acc.id}`)}
+                >
                   <div className="flex items-center space-x-4">
-                    <div 
+                    <div
                       className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white"
                       style={{ backgroundColor: getServiceColor(acc.serviceName) }}
                     >
@@ -234,8 +229,16 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium text-white">{acc.profiles.filter(p => p.status === 'activo').length} / {acc.totalProfiles} perfiles</p>
-                    <Badge className={acc.status === 'activa' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}>
+                    <p className="text-sm font-medium text-white">
+                      {(acc.profiles ?? []).filter(p => p.status === 'activo').length} / {acc.totalProfiles} perfiles
+                    </p>
+                    <Badge
+                      className={
+                        acc.status === 'activa'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'bg-orange-500/20 text-orange-400'
+                      }
+                    >
                       {acc.status}
                     </Badge>
                   </div>

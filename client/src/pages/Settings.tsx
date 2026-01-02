@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Settings as SettingsIcon, Zap, Send } from 'lucide-react';
+import { Bell, Settings as SettingsIcon, Zap, Send, MessageSquare } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -16,12 +16,17 @@ export default function Settings() {
 
   useEffect(() => {
     if (settings) {
-      // ✅ Forzar USD en UI para evitar confusión si existía otra moneda guardada
       const normalized = {
         ...settings,
         defaultCurrency: 'USD',
+        notificationsEnabled: !!settings.notificationsEnabled,
+        notificationChannel: settings.notificationChannel || 'telegram',
+        daysBeforeExpiry: settings.daysBeforeExpiry ?? 2,
+        notificationTime: settings.notificationTime || '09:00',
+        telegramBotToken: settings.telegramBotToken || '',
+        telegramChatId: settings.telegramChatId || '',
+        whatsappPhoneNumber: settings.whatsappPhoneNumber || '',
 
-        // ✅ defaults plantillas (si no existen todavía)
         telegramAccountTemplate: settings.telegramAccountTemplate || '',
         telegramProfileTemplate: settings.telegramProfileTemplate || '',
         saleMessageTemplate: settings.saleMessageTemplate || '',
@@ -60,17 +65,25 @@ export default function Settings() {
       notificationChannel: localSettings.notificationChannel,
       daysBeforeExpiry: localSettings.daysBeforeExpiry,
       notificationTime: localSettings.notificationTime,
-      telegramBotToken: localSettings.telegramBotToken,
-      telegramChatId: localSettings.telegramChatId,
-      whatsappPhoneNumber: localSettings.whatsappPhoneNumber,
+      telegramBotToken: localSettings.telegramBotToken || null,
+      telegramChatId: localSettings.telegramChatId || null,
+      whatsappPhoneNumber: localSettings.whatsappPhoneNumber || null,
 
-      // ✅ plantillas
       telegramAccountTemplate: localSettings.telegramAccountTemplate || null,
       telegramProfileTemplate: localSettings.telegramProfileTemplate || null,
+
+      // también guardamos la plantilla de venta aquí (si ya está editada)
       saleMessageTemplate: localSettings.saleMessageTemplate || null,
     });
 
-    toast.success('Notificaciones configuradas');
+    toast.success('Configuración guardada');
+  };
+
+  const handleSaveSaleTemplate = () => {
+    updateSettings({
+      saleMessageTemplate: localSettings.saleMessageTemplate || null,
+    });
+    toast.success('Plantilla de venta guardada');
   };
 
   const handleSendTestTelegram = async () => {
@@ -83,14 +96,12 @@ export default function Settings() {
     setSendingTest(false);
   };
 
-  // ✅ Moneda fija: USD
   const handleSaveCurrency = () => {
     updateSettings({ defaultCurrency: 'USD' });
     toast.success('Moneda configurada: USD');
   };
 
-  const defaultAccountTpl =
-`⚠️ CUENTA MAESTRA por vencer ({{daysLeft}} día(s))
+  const defaultAccountTpl = `⚠️ CUENTA MAESTRA por vencer ({{daysLeft}} día(s))
 Servicio: {{serviceName}}
 📧 Email: {{accountEmail}}
 🔑 Pass: {{accountPassword}}
@@ -98,8 +109,7 @@ Servicio: {{serviceName}}
 
 Acción: ¿Renovar o cancelar?`;
 
-  const defaultProfileTpl =
-`⚠️ PERFIL por vencer ({{daysLeft}} día(s))
+  const defaultProfileTpl = `⚠️ PERFIL por vencer ({{daysLeft}} día(s))
 Servicio: {{serviceName}}
 👤 Perfil: {{profileName}}
 📞 Tel: {{phone}}
@@ -117,6 +127,21 @@ Tu servicio {{serviceName}} está por vencer el {{profileEndDate}}.
 ¿Deseas RENOVAR o ya NO usarás el servicio?
 Cualquier inconveniente, contáctanos ✅`;
 
+  const defaultSaleMessageTpl = `Hola 👋🏻
+
+Aquí están tus datos de acceso:
+
+Servicio: {{serviceName}}
+📧 Correo: {{accountEmail}}
+🔑 Contraseña: {{accountPassword}}
+👤 Perfil: {{profileName}}
+🔢 PIN: {{pin}}
+📅 Caduca: {{endDate}}
+
+Renovación: Renovar 1 o 2 días antes si gusta continuar con el servicio.
+
+Cualquier inconveniente, no dudes en contactarnos ✅`;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
       <div>
@@ -124,6 +149,7 @@ Cualquier inconveniente, contáctanos ✅`;
         <p className="text-muted-foreground">Personaliza tu experiencia en la aplicación.</p>
       </div>
 
+      {/* NOTIFICACIONES */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -170,9 +196,7 @@ Cualquier inconveniente, contáctanos ✅`;
                 <label className="text-sm font-medium text-white">Avisar con anticipación</label>
                 <Select
                   value={String(localSettings.daysBeforeExpiry ?? 2)}
-                  onValueChange={(days) =>
-                    setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })
-                  }
+                  onValueChange={(days) => setLocalSettings({ ...localSettings, daysBeforeExpiry: parseInt(days) })}
                 >
                   <SelectTrigger className="glass-input" data-testid="select-days">
                     <SelectValue />
@@ -197,9 +221,7 @@ Cualquier inconveniente, contáctanos ✅`;
                   onChange={(e) => setLocalSettings({ ...localSettings, notificationTime: e.target.value })}
                   data-testid="input-notification-time"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Formato: {formatTimeDisplay(localSettings.notificationTime)}
-                </p>
+                <p className="text-xs text-muted-foreground">Formato: {formatTimeDisplay(localSettings.notificationTime)}</p>
               </div>
 
               {localSettings.notificationChannel === 'telegram' && (
@@ -238,9 +260,6 @@ Cualquier inconveniente, contáctanos ✅`;
                       onChange={(e) => setLocalSettings({ ...localSettings, telegramChatId: e.target.value })}
                       data-testid="input-telegram-chatid"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Inicia una conversación con tu bot y envía /start para obtener tu Chat ID
-                    </p>
                   </div>
 
                   <Button
@@ -253,7 +272,6 @@ Cualquier inconveniente, contáctanos ✅`;
                     {sendingTest ? 'Enviando...' : 'Enviar Notificación de Prueba'}
                   </Button>
 
-                  {/* ✅ Plantillas */}
                   <div className="border-t border-white/10 pt-4 space-y-4">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-white">Plantilla Telegram (Cuenta maestra)</p>
@@ -274,17 +292,8 @@ Cualquier inconveniente, contáctanos ✅`;
                       placeholder={defaultAccountTpl}
                     />
 
-                    <p className="text-xs text-muted-foreground">
-                      Variables:{' '}
-                      <code>{'{{daysLeft}}'}</code>{' '}
-                      <code>{'{{serviceName}}'}</code>{' '}
-                      <code>{'{{accountEmail}}'}</code>{' '}
-                      <code>{'{{accountPassword}}'}</code>{' '}
-                      <code>{'{{accountEndDate}}'}</code>
-                    </p>
-
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-white">Plantilla Telegram (Perfil + mensaje cliente)</p>
+                      <p className="text-sm font-medium text-white">Plantilla Telegram (Perfil)</p>
                       <Button
                         type="button"
                         variant="outline"
@@ -301,56 +310,9 @@ Cualquier inconveniente, contáctanos ✅`;
                       onChange={(e) => setLocalSettings({ ...localSettings, telegramProfileTemplate: e.target.value })}
                       placeholder={defaultProfileTpl}
                     />
-
-                    <p className="text-xs text-muted-foreground">
-                      Variables:{' '}
-                      <code>{'{{daysLeft}}'}</code>{' '}
-                      <code>{'{{serviceName}}'}</code>{' '}
-                      <code>{'{{accountEmail}}'}</code>{' '}
-                      <code>{'{{accountPassword}}'}</code>{' '}
-                      <code>{'{{profileName}}'}</code>{' '}
-                      <code>{'{{pin}}'}</code>{' '}
-                      <code>{'{{phone}}'}</code>{' '}
-                      <code>{'{{profileEndDate}}'}</code>
-                    </p>
                   </div>
                 </div>
               )}
-
-              {localSettings.notificationChannel === 'whatsapp' && (
-                <div className="space-y-4 border-t border-white/10 pt-4">
-                  <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-lg">
-                    <p className="text-sm text-green-200 mb-2">
-                      <strong>Configuración de WhatsApp</strong>
-                    </p>
-                    <p className="text-xs text-green-200/80">
-                      Integración en desarrollo. Pronto podrás conectar WhatsApp Business API para notificaciones automáticas.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-white">Número de WhatsApp</label>
-                    <Input
-                      type="tel"
-                      placeholder="+34 123 45 67 89"
-                      className="glass-input bg-white/5"
-                      value={localSettings.whatsappPhoneNumber || ''}
-                      onChange={(e) => setLocalSettings({ ...localSettings, whatsappPhoneNumber: e.target.value })}
-                      disabled
-                      data-testid="input-whatsapp"
-                    />
-                    <p className="text-xs text-muted-foreground">Esta funcionalidad estará disponible próximamente</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg">
-                <p className="text-sm text-primary">
-                  📬 Recibirás notificaciones por{' '}
-                  <strong>{localSettings.notificationChannel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}</strong> con anticipación y también el{' '}
-                  <strong>mismo día</strong>, a las <strong>{formatTimeDisplay(localSettings.notificationTime)}</strong>
-                </p>
-              </div>
             </>
           )}
 
@@ -359,11 +321,59 @@ Cualquier inconveniente, contáctanos ✅`;
             className="bg-primary hover:bg-primary/90 text-white w-full"
             data-testid="button-save-notifications"
           >
-            Guardar Configuración de Notificaciones
+            Guardar Configuración
           </Button>
         </CardContent>
       </Card>
 
+      {/* MENSAJE DE VENTA */}
+      <Card className="glass-card">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-primary" /> Mensaje de Venta
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">Plantilla para copiar/pegar al crear una venta</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
+              onClick={() => setLocalSettings({ ...localSettings, saleMessageTemplate: defaultSaleMessageTpl })}
+            >
+              Usar base
+            </Button>
+          </div>
+
+          <textarea
+            className="glass-input w-full min-h-[220px] p-3 text-sm"
+            value={localSettings.saleMessageTemplate || ''}
+            onChange={(e) => setLocalSettings({ ...localSettings, saleMessageTemplate: e.target.value })}
+            placeholder={defaultSaleMessageTpl}
+          />
+
+          <p className="text-xs text-muted-foreground">
+            Variables:{' '}
+            <code>{'{{serviceName}}'}</code>{' '}
+            <code>{'{{accountEmail}}'}</code>{' '}
+            <code>{'{{accountPassword}}'}</code>{' '}
+            <code>{'{{profileName}}'}</code>{' '}
+            <code>{'{{profileSlot}}'}</code>{' '}
+            <code>{'{{pin}}'}</code>{' '}
+            <code>{'{{endDate}}'}</code>{' '}
+            <code>{'{{clientName}}'}</code>{' '}
+            <code>{'{{clientPhone}}'}</code>{' '}
+            <code>{'{{price}}'}</code>
+          </p>
+
+          <Button onClick={handleSaveSaleTemplate} className="bg-primary hover:bg-primary/90 text-white w-full">
+            Guardar Plantilla
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* PREFERENCIAS GENERALES */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -378,13 +388,7 @@ Cualquier inconveniente, contáctanos ✅`;
               <span className="text-xs text-muted-foreground">Fijo</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Actualmente el sistema trabaja solo en <strong>USD</strong> para evitar confusión.
-            </p>
-          </div>
-
-          <div className="bg-primary/10 border border-primary/20 p-3 rounded-lg">
-            <p className="text-sm text-primary">
-              Moneda seleccionada: <strong>USD</strong>
+              Actualmente el sistema trabaja solo en <strong>USD</strong>.
             </p>
           </div>
 
@@ -398,6 +402,7 @@ Cualquier inconveniente, contáctanos ✅`;
         </CardContent>
       </Card>
 
+      {/* INFO DEL SISTEMA */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -408,7 +413,9 @@ Cualquier inconveniente, contáctanos ✅`;
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground">Versión</p>
-              <p className="text-sm text-white font-medium" data-testid="text-version">2.0.0</p>
+              <p className="text-sm text-white font-medium" data-testid="text-version">
+                2.0.0
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Última actualización</p>
@@ -416,7 +423,9 @@ Cualquier inconveniente, contáctanos ✅`;
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Estado</p>
-              <p className="text-sm text-emerald-400 font-medium" data-testid="text-status">✅ En línea</p>
+              <p className="text-sm text-emerald-400 font-medium" data-testid="text-status">
+                ✅ En línea
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Tema</p>
@@ -428,4 +437,3 @@ Cualquier inconveniente, contáctanos ✅`;
     </motion.div>
   );
 }
-
