@@ -52,30 +52,22 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* ✅ FINANZAS más compacto SOLO en teléfono */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
         <motion.div variants={item}>
           <Card className="glass-card hover:bg-card/80 transition-colors">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Ingresos Totales</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+                Ingresos Totales
+              </CardTitle>
               <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold font-display text-white">{money(stats.totalSales)}</div>
-              <p className="text-xs text-muted-foreground mt-1">Por venta de perfiles</p>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={item}>
-          <Card className="glass-card hover:bg-card/80 transition-colors">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Ganancia Neta</CardTitle>
-              <TrendingUp className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold font-display text-emerald-500 neon-text">{money(stats.netProfit)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Margen actual del {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%
+            <CardContent className="pt-2 sm:pt-3">
+              <div className="text-lg sm:text-2xl font-bold font-display text-white">
+                {money(stats.totalSales)}
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                Por venta de perfiles
               </p>
             </CardContent>
           </Card>
@@ -83,28 +75,57 @@ export default function Dashboard() {
 
         <motion.div variants={item}>
           <Card className="glass-card hover:bg-card/80 transition-colors">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Cuentas Activas</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+                Ganancia Neta
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent className="pt-2 sm:pt-3">
+              <div className="text-lg sm:text-2xl font-bold font-display text-emerald-500 neon-text">
+                {money(stats.netProfit)}
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                Margen {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}%
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={item}>
+          <Card className="glass-card hover:bg-card/80 transition-colors">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+                Cuentas Activas
+              </CardTitle>
               <Users className="h-4 w-4 text-blue-400" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold font-display text-white">{stats.activeAccounts}</div>
-              <p className="text-xs text-muted-foreground mt-1">Total gestionadas</p>
+            <CardContent className="pt-2 sm:pt-3">
+              <div className="text-lg sm:text-2xl font-bold font-display text-white">
+                {stats.activeAccounts}
+              </div>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                Total gestionadas
+              </p>
             </CardContent>
           </Card>
         </motion.div>
 
         <motion.div variants={item}>
           <Card className="glass-card hover:bg-card/80 transition-colors border-orange-500/20">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Por Vencer</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+                Por Vencer
+              </CardTitle>
               <AlertTriangle className="h-4 w-4 text-orange-500" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold font-display text-orange-500">
+            <CardContent className="pt-2 sm:pt-3">
+              <div className="text-lg sm:text-2xl font-bold font-display text-orange-500">
                 {expiringSoonAccounts.length + expiringSoonProfiles.length}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">En los próximos 3 días</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                Próx. 3 días
+              </p>
             </CardContent>
           </Card>
         </motion.div>
