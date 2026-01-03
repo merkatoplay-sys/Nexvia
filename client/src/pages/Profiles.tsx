@@ -81,7 +81,7 @@ export default function Profiles() {
 
   const getClientName = (clientId?: string) => {
     if (!clientId) return 'Sin asignar';
-    return clientsSafe.find(c => c.id === clientId)?.name || 'Desconocido';
+    return clientsSafe.find((c) => c.id === clientId)?.name || 'Desconocido';
   };
 
   const totalActiveProfiles = useMemo(() => {
@@ -101,11 +101,11 @@ export default function Profiles() {
         ? 'bg-yellow-500/20 text-yellow-400'
         : 'bg-red-500/20 text-red-400';
 
-    return <Badge className={cls}>{daysLeft} día{daysLeft !== 1 ? 's' : ''}</Badge>;
+    return <Badge className={cls}>{daysLeft}d</Badge>;
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div>
         <h1 className="text-3xl font-display font-bold text-white mb-2">Perfiles</h1>
         <p className="text-muted-foreground">Gestiona tus perfiles activos organizados por cuenta maestra.</p>
@@ -142,9 +142,9 @@ export default function Profiles() {
             return (
               <motion.div key={account.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <Card className="glass-card" data-testid={`card-account-profiles-${account.id}`}>
-                  <CardHeader className="bg-white/5 border-b border-white/5">
+                  <CardHeader className="bg-white/5 border-b border-white/5 py-3">
                     <div
-                      className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-2 rounded transition-colors"
+                      className="flex justify-between items-center cursor-pointer hover:bg-white/5 px-2 py-1.5 rounded transition-colors"
                       onClick={() => setExpandedAccount(isExpanded ? null : account.id)}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -162,13 +162,14 @@ export default function Profiles() {
                           {String(account.serviceName ?? '').substring(0, 1)}
                         </div>
                         <div className="min-w-0">
-                          <CardTitle className="text-lg text-white truncate">{account.serviceName}</CardTitle>
+                          <CardTitle className="text-base text-white truncate">{account.serviceName}</CardTitle>
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+
+                      <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">
-                          {accountProfiles.length} perfil{accountProfiles.length !== 1 ? 'es' : ''}
+                          {accountProfiles.length}
                         </Badge>
                         {isExpanded ? (
                           <ChevronUp className="h-5 w-5 text-muted-foreground" />
@@ -180,182 +181,206 @@ export default function Profiles() {
                   </CardHeader>
 
                   {isExpanded && (
-                    <CardContent className="pt-4 space-y-3 sm:space-y-4">
-                      {accountProfiles.map((profile: any) => {
-                        const end = safeDate(profile.endDate);
-                        const daysLeft = end ? differenceInDays(end, new Date()) : null;
+                    <CardContent className="pt-4">
+                      {/* ✅ Lista en filas (compacta) */}
+                      <div className="rounded-lg border border-white/10 overflow-hidden">
+                        <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-2 bg-white/5 text-[11px] text-muted-foreground">
+                          <div className="col-span-3">Perfil / Cliente</div>
+                          <div className="col-span-2">Teléfono</div>
+                          <div className="col-span-2">PIN</div>
+                          <div className="col-span-2">Precio</div>
+                          <div className="col-span-1 text-center">Vence</div>
+                          <div className="col-span-2 text-right">Acciones</div>
+                        </div>
 
-                        const canRenew = typeof daysLeft === 'number' && daysLeft <= 1;
-                        const isEditing = editingId === profile.id + account.id;
+                        <div className="divide-y divide-white/10">
+                          {accountProfiles.map((profile: any) => {
+                            const end = safeDate(profile.endDate);
+                            const daysLeft = end ? differenceInDays(end, new Date()) : null;
 
-                        return (
-                          <motion.div
-                            key={profile.id}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="p-3 sm:p-4 rounded-lg bg-white/5 border border-white/10 space-y-3"
-                            data-testid={`card-profile-${profile.id}`}
-                          >
-                            {/* ✅ CABECERA COMPACTA */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-[10px] sm:text-xs text-muted-foreground">Perfil</p>
-                                <p className="text-sm sm:text-lg font-medium text-white truncate">
-                                  {isEditing ? 'Editando…' : profile.name}
-                                </p>
+                            const canRenew = typeof daysLeft === 'number' && daysLeft <= 1;
+                            const isEditing = editingId === profile.id + account.id;
+
+                            return (
+                              <div key={profile.id} className="px-3 py-2 bg-white/5 hover:bg-white/10 transition-colors">
+                                {isEditing ? (
+                                  <div className="grid grid-cols-2 md:grid-cols-12 gap-2 items-center">
+                                    <div className="col-span-2 md:col-span-3">
+                                      <label className="text-[10px] text-muted-foreground">Nombre</label>
+                                      <Input
+                                        className="glass-input h-9"
+                                        value={editData.name}
+                                        onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                                      />
+                                    </div>
+
+                                    <div className="col-span-1 md:col-span-2">
+                                      <label className="text-[10px] text-muted-foreground">Teléfono</label>
+                                      <Input
+                                        className="glass-input h-9"
+                                        value={editData.phone}
+                                        onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                                      />
+                                    </div>
+
+                                    <div className="col-span-1 md:col-span-2">
+                                      <label className="text-[10px] text-muted-foreground">PIN</label>
+                                      <Input
+                                        className="glass-input h-9"
+                                        value={editData.pin}
+                                        onChange={(e) => setEditData({ ...editData, pin: e.target.value })}
+                                      />
+                                    </div>
+
+                                    <div className="col-span-1 md:col-span-2">
+                                      <label className="text-[10px] text-muted-foreground">Precio</label>
+                                      <Input
+                                        type="number"
+                                        className="glass-input h-9"
+                                        placeholder="Ej: 25"
+                                        value={editData.price}
+                                        onChange={(e) => setEditData({ ...editData, price: e.target.value })}
+                                      />
+                                    </div>
+
+                                    <div className="col-span-1 md:col-span-2">
+                                      <label className="text-[10px] text-muted-foreground">Cliente</label>
+                                      <Select
+                                        value={editData.clientId || '__none__'}
+                                        onValueChange={(val) =>
+                                          setEditData({ ...editData, clientId: val === '__none__' ? '' : val })
+                                        }
+                                      >
+                                        <SelectTrigger className="glass-input h-9">
+                                          <SelectValue placeholder="Seleccionar" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-popover border-white/10 text-white">
+                                          <SelectItem value="__none__">Sin asignar</SelectItem>
+                                          {clientsSafe.map((c) => (
+                                            <SelectItem key={c.id} value={c.id}>
+                                              {c.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+
+                                    <div className="col-span-2 md:col-span-1 flex md:justify-center">
+                                      {statusBadge(daysLeft)}
+                                    </div>
+
+                                    <div className="col-span-2 md:col-span-12 flex gap-2 justify-end pt-1">
+                                      <Button
+                                        onClick={() => handleSave(account.id, profile.id)}
+                                        className="bg-primary hover:bg-primary/90 text-white h-8 px-3 text-sm"
+                                      >
+                                        Guardar
+                                      </Button>
+                                      <Button
+                                        onClick={() => setEditingId(null)}
+                                        variant="outline"
+                                        className="border-white/10 hover:bg-white/5 text-white h-8 px-3 text-sm"
+                                      >
+                                        Cancelar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-12 gap-2 items-center">
+                                    {/* Perfil / Cliente */}
+                                    <div className="col-span-7 md:col-span-3 min-w-0">
+                                      <p className="text-sm text-white font-medium truncate">{profile.name}</p>
+                                      <p className="text-[11px] text-muted-foreground truncate">
+                                        {getClientName(profile.clientId)}
+                                      </p>
+                                    </div>
+
+                                    {/* Tel */}
+                                    <div className="hidden md:block md:col-span-2 min-w-0">
+                                      <p className="text-xs text-white truncate">{profile.phone || '—'}</p>
+                                    </div>
+
+                                    {/* PIN */}
+                                    <div className="hidden md:block md:col-span-2">
+                                      <p className="text-xs text-white font-mono">{profile.pin || '—'}</p>
+                                    </div>
+
+                                    {/* Precio */}
+                                    <div className="hidden md:block md:col-span-2">
+                                      <p className="text-xs text-white font-medium">{money(profile.price)}</p>
+                                    </div>
+
+                                    {/* Badge */}
+                                    <div className="col-span-2 md:col-span-1 flex justify-end md:justify-center">
+                                      {statusBadge(daysLeft)}
+                                    </div>
+
+                                    {/* Acciones */}
+                                    <div className="col-span-3 md:col-span-2 flex justify-end gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleEdit(profile, account.id)}
+                                        className="h-8 w-8 p-0 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400"
+                                        title="Editar"
+                                        data-testid={`button-edit-profile-${profile.id}`}
+                                      >
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+
+                                      {canRenew && (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => renewProfile(account.id, profile.id, profile.price || 5)}
+                                          className="h-8 w-8 p-0 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400"
+                                          title="Renovar"
+                                          data-testid={`button-renew-profile-${profile.id}`}
+                                        >
+                                          <RotateCw className="h-4 w-4" />
+                                        </Button>
+                                      )}
+
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() =>
+                                          setDeleteConfirm({
+                                            open: true,
+                                            accountId: account.id,
+                                            profileId: profile.id,
+                                            name: profile.name,
+                                          })
+                                        }
+                                        className="h-8 w-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
+                                        title="Eliminar"
+                                        data-testid={`button-delete-profile-${profile.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+
+                                    {/* ✅ Extra info en móvil (fila debajo, compacta) */}
+                                    <div className="col-span-12 md:hidden flex gap-3 text-[11px] text-muted-foreground">
+                                      <span className="truncate">
+                                        <span className="text-white">Tel:</span> {profile.phone || '—'}
+                                      </span>
+                                      <span className="truncate">
+                                        <span className="text-white">PIN:</span>{' '}
+                                        <span className="font-mono text-white">{profile.pin || '—'}</span>
+                                      </span>
+                                      <span className="truncate">
+                                        <span className="text-white">Precio:</span>{' '}
+                                        <span className="text-white font-medium">{money(profile.price)}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              <div className="shrink-0">{statusBadge(daysLeft)}</div>
-                            </div>
-
-                            {/* ✅ CONTENIDO: MÁS COMPACTO (TEL: 2 columnas) */}
-                            {isEditing ? (
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="col-span-2">
-                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Nombre</label>
-                                  <Input
-                                    className="glass-input h-9"
-                                    value={editData.name}
-                                    onChange={e => setEditData({ ...editData, name: e.target.value })}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Teléfono</label>
-                                  <Input
-                                    className="glass-input h-9"
-                                    value={editData.phone}
-                                    onChange={e => setEditData({ ...editData, phone: e.target.value })}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[10px] sm:text-xs text-muted-foreground">PIN</label>
-                                  <Input
-                                    className="glass-input h-9"
-                                    value={editData.pin}
-                                    onChange={e => setEditData({ ...editData, pin: e.target.value })}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Precio</label>
-                                  <Input
-                                    type="number"
-                                    className="glass-input h-9"
-                                    placeholder="Ej: 25"
-                                    value={editData.price}
-                                    onChange={e => setEditData({ ...editData, price: e.target.value })}
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[10px] sm:text-xs text-muted-foreground">Cliente</label>
-                                  <Select
-                                    value={editData.clientId || '__none__'}
-                                    onValueChange={(val) =>
-                                      setEditData({ ...editData, clientId: val === '__none__' ? '' : val })
-                                    }
-                                  >
-                                    <SelectTrigger className="glass-input h-9">
-                                      <SelectValue placeholder="Seleccionar" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-popover border-white/10 text-white">
-                                      <SelectItem value="__none__">Sin asignar</SelectItem>
-                                      {clientsSafe.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>
-                                          {c.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div className="col-span-2 md:col-span-1">
-                                  <p className="text-[10px] sm:text-xs text-muted-foreground">Cliente</p>
-                                  <p className="text-xs sm:text-sm text-white truncate">{getClientName(profile.clientId)}</p>
-                                </div>
-
-                                <div>
-                                  <p className="text-[10px] sm:text-xs text-muted-foreground">Teléfono</p>
-                                  <p className="text-xs sm:text-sm text-white truncate">
-                                    {profile.phone || '—'}
-                                  </p>
-                                </div>
-
-                                <div>
-                                  <p className="text-[10px] sm:text-xs text-muted-foreground">PIN</p>
-                                  <p className="text-xs sm:text-sm text-white font-mono">
-                                    {profile.pin || '—'}
-                                  </p>
-                                </div>
-
-                                <div>
-                                  <p className="text-[10px] sm:text-xs text-muted-foreground">Precio</p>
-                                  <p className="text-xs sm:text-sm text-white font-medium">{money(profile.price)}</p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* ✅ ACCIONES (compactas) */}
-                            <div className="flex gap-2 flex-wrap pt-2 border-t border-white/5">
-                              {isEditing ? (
-                                <>
-                                  <Button
-                                    onClick={() => handleSave(account.id, profile.id)}
-                                    className="bg-primary hover:bg-primary/90 text-white h-8 text-sm"
-                                  >
-                                    Guardar
-                                  </Button>
-                                  <Button
-                                    onClick={() => setEditingId(null)}
-                                    variant="outline"
-                                    className="border-white/10 hover:bg-white/5 text-white h-8 text-sm"
-                                  >
-                                    Cancelar
-                                  </Button>
-                                </>
-                              ) : (
-                                <>
-                                  <Button
-                                    onClick={() => handleEdit(profile, account.id)}
-                                    className="bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 h-8 text-sm"
-                                    data-testid={`button-edit-profile-${profile.id}`}
-                                  >
-                                    <Edit className="h-3 w-3 mr-1" /> Editar
-                                  </Button>
-
-                                  {canRenew && (
-                                    <Button
-                                      onClick={() => renewProfile(account.id, profile.id, profile.price || 5)}
-                                      className="bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400 h-8 text-sm"
-                                      data-testid={`button-renew-profile-${profile.id}`}
-                                    >
-                                      <RotateCw className="h-3 w-3 mr-1" /> Renovar
-                                    </Button>
-                                  )}
-
-                                  <Button
-                                    onClick={() =>
-                                      setDeleteConfirm({
-                                        open: true,
-                                        accountId: account.id,
-                                        profileId: profile.id,
-                                        name: profile.name,
-                                      })
-                                    }
-                                    className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 h-8 text-sm"
-                                    data-testid={`button-delete-profile-${profile.id}`}
-                                  >
-                                    <Trash2 className="h-3 w-3 mr-1" /> Eliminar
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </motion.div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      </div>
                     </CardContent>
                   )}
                 </Card>
@@ -367,7 +392,7 @@ export default function Profiles() {
 
       <ConfirmDialog
         open={deleteConfirm.open}
-        onOpenChange={open => setDeleteConfirm({ ...deleteConfirm, open })}
+        onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
         title={`¿Eliminar perfil "${deleteConfirm.name}"?`}
         description="Se eliminará el perfil y todos sus registros financieros asociados. El perfil quedará disponible para ser vendido nuevamente. Esta acción no se puede deshacer."
         confirmText="Eliminar Perfil"
