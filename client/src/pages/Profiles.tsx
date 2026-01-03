@@ -1,3 +1,4 @@
+// Profiles.tsx
 import { useStreaming } from '@/context/StreamingContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,15 +26,40 @@ const money = (v: any) => {
 };
 
 export default function Profiles() {
-  const { accounts, clients, updateProfile, renewProfile, deleteProfile } = useStreaming();
+  const { accounts, clients, updateProfile, renewProfile, deleteProfile, services, getServiceColor } = useStreaming();
 
   const accountsSafe = accounts ?? [];
   const clientsSafe = clients ?? [];
+  const servicesSafe = services ?? [];
+
+  // helpers servicio (ID primero, fallback por nombre)
+  const getServiceForAccount = (acc: any) => {
+    if (!acc) return null;
+    const byId = acc.serviceId ? servicesSafe.find((s: any) => s.id === acc.serviceId) : null;
+    if (byId) return byId;
+    if (acc.serviceName) return servicesSafe.find((s: any) => s.name === acc.serviceName) ?? null;
+    return null;
+  };
+
+  const getServiceNameForAccount = (acc: any) => {
+    const svc = getServiceForAccount(acc);
+    return svc?.name ?? acc?.serviceName ?? 'Servicio';
+  };
+
+  const getServiceColorForAccount = (acc: any) => {
+    const svc = getServiceForAccount(acc);
+    const ref = svc?.id || acc?.serviceId || svc?.name || acc?.serviceName || '';
+    return svc?.color ?? (getServiceColor?.(String(ref)) as string) ?? '#6366f1';
+  };
+
+  const getServiceImageForAccount = (acc: any) => {
+    const svc = getServiceForAccount(acc);
+    return svc?.imageUrl || svc?.iconUrl || svc?.image || svc?.logoUrl || '';
+  };
 
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // ✅ strings para inputs controlados (y permitir vacío)
   const [editData, setEditData] = useState({
     name: '',
     pin: '',
@@ -68,7 +94,6 @@ export default function Profiles() {
       phone: editData.phone?.trim() ? editData.phone.trim() : null,
       price: editData.price === '' ? null : Number(editData.price),
     });
-
     setEditingId(null);
   };
 
@@ -136,8 +161,11 @@ export default function Profiles() {
           accountsSafe.map((account: any) => {
             const accountProfiles = (account?.profiles ?? []).filter((p: any) => p.status !== 'disponible');
             const isExpanded = expandedAccount === account.id;
-
             if (accountProfiles.length === 0) return null;
+
+            const serviceName = getServiceNameForAccount(account);
+            const serviceColor = getServiceColorForAccount(account);
+            const serviceImage = getServiceImageForAccount(account);
 
             return (
               <motion.div key={account.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -149,20 +177,25 @@ export default function Profiles() {
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-sm shrink-0"
-                          style={{
-                            backgroundColor:
-                              account.serviceName === 'Netflix'
-                                ? '#E50914'
-                                : account.serviceName === 'Spotify'
-                                ? '#1DB954'
-                                : '#7B68EE',
-                          }}
+                          className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center font-bold text-white text-sm shrink-0"
+                          style={{ backgroundColor: serviceColor }}
                         >
-                          {String(account.serviceName ?? '').substring(0, 1)}
+                          {serviceImage ? (
+                            <img
+                              src={serviceImage}
+                              alt={serviceName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            String(serviceName ?? '').substring(0, 1)
+                          )}
                         </div>
+
                         <div className="min-w-0">
-                          <CardTitle className="text-base text-white truncate">{account.serviceName}</CardTitle>
+                          <CardTitle className="text-base text-white truncate">{serviceName}</CardTitle>
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
                         </div>
                       </div>
@@ -182,7 +215,6 @@ export default function Profiles() {
 
                   {isExpanded && (
                     <CardContent className="pt-4">
-                      {/* ✅ Lista en filas (compacta) */}
                       <div className="rounded-lg border border-white/10 overflow-hidden">
                         <div className="hidden md:grid grid-cols-12 gap-2 px-3 py-2 bg-white/5 text-[11px] text-muted-foreground">
                           <div className="col-span-3">Perfil / Cliente</div>
@@ -287,7 +319,6 @@ export default function Profiles() {
                                   </div>
                                 ) : (
                                   <div className="grid grid-cols-12 gap-2 items-center">
-                                    {/* Perfil / Cliente */}
                                     <div className="col-span-7 md:col-span-3 min-w-0">
                                       <p className="text-sm text-white font-medium truncate">{profile.name}</p>
                                       <p className="text-[11px] text-muted-foreground truncate">
@@ -295,27 +326,22 @@ export default function Profiles() {
                                       </p>
                                     </div>
 
-                                    {/* Tel */}
                                     <div className="hidden md:block md:col-span-2 min-w-0">
                                       <p className="text-xs text-white truncate">{profile.phone || '—'}</p>
                                     </div>
 
-                                    {/* PIN */}
                                     <div className="hidden md:block md:col-span-2">
                                       <p className="text-xs text-white font-mono">{profile.pin || '—'}</p>
                                     </div>
 
-                                    {/* Precio */}
                                     <div className="hidden md:block md:col-span-2">
                                       <p className="text-xs text-white font-medium">{money(profile.price)}</p>
                                     </div>
 
-                                    {/* Badge */}
                                     <div className="col-span-2 md:col-span-1 flex justify-end md:justify-center">
                                       {statusBadge(daysLeft)}
                                     </div>
 
-                                    {/* Acciones */}
                                     <div className="col-span-3 md:col-span-2 flex justify-end gap-1">
                                       <Button
                                         size="sm"
@@ -360,7 +386,6 @@ export default function Profiles() {
                                       </Button>
                                     </div>
 
-                                    {/* ✅ Extra info en móvil (fila debajo, compacta) */}
                                     <div className="col-span-12 md:hidden flex gap-3 text-[11px] text-muted-foreground">
                                       <span className="truncate">
                                         <span className="text-white">Tel:</span> {profile.phone || '—'}
