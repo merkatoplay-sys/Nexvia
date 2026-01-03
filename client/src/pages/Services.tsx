@@ -9,6 +9,9 @@ import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
+// ✅ normaliza strings (evita bugs por mayúsculas/minúsculas/espacios)
+const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+
 export default function Services() {
   const { services, accounts, addService, updateService, deleteService } = useStreaming();
   const accountsSafe = accounts ?? [];
@@ -156,10 +159,10 @@ export default function Services() {
     }
   };
 
-  // ✅ CLAVE: cuentas por serviceId (fallback por name para cuentas viejas)
+  // ✅ CLAVE: cuentas por serviceId (fallback legacy por nombre NORMALIZADO)
   const getAccountCountForService = (service: any) => {
     const byId = accountsSafe.filter((a: any) => a.serviceId && a.serviceId === service.id).length;
-    const legacy = accountsSafe.filter((a: any) => !a.serviceId && a.serviceName === service.name).length;
+    const legacy = accountsSafe.filter((a: any) => !a.serviceId && norm(a.serviceName) === norm(service.name)).length;
     return byId + legacy;
   };
 

@@ -267,8 +267,8 @@ export async function registerRoutes(
         (incomingServiceName ? servicesList.find((s: any) => norm(s.name) === norm(incomingServiceName)) : null);
 
       // ✅ Permitimos fallback por nombre (legacy), pero si no existe nada => error
-      if (!svc && !incomingServiceName) {
-        return res.status(400).json({ message: "Servicio inválido o no proporcionado" });
+      if (!svc) {
+        return res.status(400).json({ message: "Servicio inválido (crea el servicio primero)" });
       }
 
       const planName = String(req.body?.planName ?? "").trim() || null;

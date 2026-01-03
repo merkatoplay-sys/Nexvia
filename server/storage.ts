@@ -18,7 +18,7 @@ import {
   type Settings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, inArray, or } from "drizzle-orm";
+import { eq, and, desc, inArray, or, sql } from "drizzle-orm";
 
 /**
  * Drizzle timestamp necesita Date.
@@ -126,12 +126,58 @@ export class DatabaseStorage implements IStorage {
     return newService;
   }
 
+  /**
+   * ✅ CLAVE:
+   * - si un servicio cambia de nombre, actualizamos accounts.serviceName en:
+   *   1) cuentas con serviceId = este servicio
+   *   2) cuentas legacy (serviceId null) que tengan el nombre viejo (normalizado)
+   */
   async updateService(id: string, userId: string, updates: Partial<Service>): Promise<Service> {
+    // 1) leer servicio actual para saber oldName
+    const [current] = await db
+      .select()
+      .from(services)
+      .where(and(eq(services.id, id), eq(services.userId, userId)));
+
+    if (!current) {
+      throw new Error("Servicio no encontrado");
+    }
+
+    // 2) actualizar servicio
     const [updated] = await db
       .update(services)
       .set(updates)
       .where(and(eq(services.id, id), eq(services.userId, userId)))
       .returning();
+
+    if (!updated) {
+      throw new Error("No se pudo actualizar el servicio");
+    }
+
+    // 3) siempre sincroniza serviceName en cuentas que ya usan serviceId
+    await db
+      .update(accounts)
+      .set({ serviceName: updated.name })
+      .where(and(eq(accounts.userId, userId), eq(accounts.serviceId, id)));
+
+    // 4) si cambió el nombre, “repara” legacy: serviceId null + serviceName viejo
+    const nameChanged =
+      typeof (updates as any)?.name === "string" && norm((updates as any).name) !== norm(current.name);
+
+    if (nameChanged) {
+      const oldNorm = norm(current.name);
+
+      await db
+        .update(accounts)
+        .set({ serviceId: id, serviceName: updated.name })
+        .where(
+          and(
+            eq(accounts.userId, userId),
+            sql`${accounts.serviceId} is null`,
+            sql`lower(trim(${accounts.serviceName})) = ${oldNorm}`
+          )
+        );
+    }
 
     return updated;
   }
@@ -144,7 +190,9 @@ export class DatabaseStorage implements IStorage {
 
     if (!service) return;
 
-    // ✅ Cambiado: ahora también buscamos por serviceId (nuevo) o por serviceName (legacy)
+    const serviceNorm = norm(service.name);
+
+    // ✅ Busca cuentas por serviceId (nuevo) o por serviceName normalizado (legacy)
     const serviceAccounts = await db
       .select()
       .from(accounts)
@@ -153,7 +201,7 @@ export class DatabaseStorage implements IStorage {
           eq(accounts.userId, userId),
           or(
             eq(accounts.serviceId, service.id),
-            eq(accounts.serviceName, service.name)
+            and(sql`${accounts.serviceId} is null`, sql`lower(trim(${accounts.serviceName})) = ${serviceNorm}`)
           )
         )
       );
@@ -285,7 +333,7 @@ export class DatabaseStorage implements IStorage {
       .from(accounts)
       .where(and(eq(accounts.userId, userId), eq(accounts.isArchived, false)));
 
-    const ids = activeAccounts.map(a => a.id);
+    const ids = activeAccounts.map((a) => a.id);
     if (ids.length === 0) return [];
 
     return await db
@@ -347,9 +395,11 @@ export class DatabaseStorage implements IStorage {
     // ✅ Cambiado: compara por serviceId si ambos tienen, sino por serviceName (legacy)
     const sameService =
       (fromAccount.serviceId && toAccount.serviceId && fromAccount.serviceId === toAccount.serviceId) ||
-      (!fromAccount.serviceId && !toAccount.serviceId && norm(fromAccount.serviceName) === norm(toAccount.serviceName)) ||
+      (!fromAccount.serviceId &&
+        !toAccount.serviceId &&
+        norm(fromAccount.serviceName) === norm(toAccount.serviceName)) ||
       // caso mixto (uno legacy, otro nuevo): comparamos por nombre para permitir migraciones
-      (norm(fromAccount.serviceName) === norm(toAccount.serviceName));
+      norm(fromAccount.serviceName) === norm(toAccount.serviceName);
 
     if (!sameService) {
       throw new Error("No puedes mover perfiles entre servicios distintos");
@@ -374,11 +424,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(profiles)
       .where(
-        and(
-          eq(profiles.userId, userId),
-          eq(profiles.accountId, toAccountId),
-          eq(profiles.status, "disponible")
-        )
+        and(eq(profiles.userId, userId), eq(profiles.accountId, toAccountId), eq(profiles.status, "disponible"))
       )
       .orderBy(desc(profiles.createdAt));
 
@@ -428,11 +474,7 @@ export class DatabaseStorage implements IStorage {
 
   // Clients
   async getClients(userId: string): Promise<Client[]> {
-    return await db
-      .select()
-      .from(clients)
-      .where(eq(clients.userId, userId))
-      .orderBy(desc(clients.createdAt));
+    return await db.select().from(clients).where(eq(clients.userId, userId)).orderBy(desc(clients.createdAt));
   }
 
   async createClient(client: InsertClient): Promise<Client> {
@@ -442,11 +484,7 @@ export class DatabaseStorage implements IStorage {
 
   // Expenses
   async getExpenses(userId: string): Promise<Expense[]> {
-    return await db
-      .select()
-      .from(expenses)
-      .where(eq(expenses.userId, userId))
-      .orderBy(desc(expenses.date));
+    return await db.select().from(expenses).where(eq(expenses.userId, userId)).orderBy(desc(expenses.date));
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
@@ -499,10 +537,7 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     if (!updated) {
-      const [newSettings] = await db
-        .insert(settings)
-        .values({ ...updates, userId } as any)
-        .returning();
+      const [newSettings] = await db.insert(settings).values({ ...updates, userId } as any).returning();
       return newSettings;
     }
 

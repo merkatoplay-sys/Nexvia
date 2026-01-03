@@ -207,7 +207,7 @@ export default function Profiles() {
                               }}
                             />
                           ) : (
-                            String(serviceDisplayName || '').substring(0, 1)
+                            String(serviceDisplayName || baseServiceName || '').substring(0, 1)
                           )}
                         </div>
 

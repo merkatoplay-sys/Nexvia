@@ -191,6 +191,22 @@ async function fetchAPI(url: string, options?: RequestInit) {
 // ✅ NORMALIZADOR para match por nombre (evita bugs por mayúsculas/minúsculas/espacios)
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
+// ✅ búsqueda tolerante por nombre (exacto + parcial seguro)
+const findServiceByName = (services: any[], name: any) => {
+  const n = norm(name);
+  if (!n) return null;
+
+  const exact = services.find((s: any) => norm(s?.name) === n);
+  if (exact) return exact;
+
+  const candidates = services.filter((s: any) => {
+    const sn = norm(s?.name);
+    return sn && (sn.includes(n) || n.includes(sn));
+  });
+
+  return candidates.length === 1 ? candidates[0] : null;
+};
+
 // ✅ construye nombre para mostrar: "Spotify Premium 1 mes"
 const buildDisplayName = (serviceName: string, planName?: any) => {
   const plan = String(planName ?? '').trim();
@@ -239,12 +255,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
 
-  // ✅ Helpers: resolver servicio por ID y fallback por nombre (case-insensitive)
+  // ✅ Helpers: resolver servicio por ID y fallback por nombre (tolerante)
   const getServiceForAccount = (acc?: Partial<Account> | null) => {
     if (!acc) return null;
     const byId = acc.serviceId ? services.find((s) => s.id === acc.serviceId) : null;
     if (byId) return byId;
-    if (acc.serviceName) return services.find((s) => norm(s.name) === norm(acc.serviceName)) ?? null;
+    if (acc.serviceName) return findServiceByName(services as any[], acc.serviceName) ?? null;
     return null;
   };
 
@@ -260,7 +276,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return svc?.maxProfiles || 7;
   };
 
-  // ✅ Backfill automático (1 vez): si cuentas viejas no tienen serviceId, intenta setearlo (case-insensitive)
+  /**
+   * ✅ Backfill automático (1 vez):
+   * - si hay cuentas viejas sin serviceId, intentamos asignar serviceId con match tolerante por nombre
+   * - mandamos SOLO serviceId al backend (para que backend ponga el serviceName correcto)
+   */
   const didBackfillRef = useRef(false);
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -279,24 +299,25 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       let touched = 0;
 
       for (const acc of legacy) {
-        const svc = services.find((s) => norm(s.name) === norm(acc.serviceName));
+        const svc = findServiceByName(services as any[], acc.serviceName);
         if (!svc) continue;
 
         try {
-          // ✅ además de serviceId, normalizamos el serviceName a la versión “actual” del servicio
           await fetchAPI(`/api/accounts/${acc.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ serviceId: svc.id, serviceName: svc.name }),
+            body: JSON.stringify({ serviceId: svc.id }),
           });
           touched++;
         } catch {
-          // si backend no soporta serviceId todavía, no pasa nada
+          // si backend no soporta todavía o algo falla, no bloqueamos
         }
       }
 
       if (touched > 0) {
         try {
           await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+          await queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+          await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
         } catch {}
       }
     })();
@@ -344,9 +365,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Service> }) =>
       fetchAPI(`/api/services/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => {
+      // ✅ si cambias nombre de servicio, backend sincroniza cuentas -> refrescamos todo
       queryClient.invalidateQueries({ queryKey: ['/api/services'] });
-      // ✅ por si hay UIs usando fallback por nombre, refrescamos cuentas también
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
     },
   });
 
