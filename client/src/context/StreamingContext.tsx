@@ -15,7 +15,6 @@ export interface Service {
   maxProfiles: number;
   isCustom: boolean;
 
-  // ✅ opcional (para logo)
   imageUrl?: string | null;
 
   createdAt?: Date;
@@ -40,10 +39,7 @@ export interface Account {
   id: string;
   userId: string;
 
-  // ✅ NUEVO: relación real por ID (esto evita el problema de renombre)
   serviceId?: string | null;
-
-  // ✅ legacy / compat (se mantiene para cuentas viejas o backend viejo)
   serviceName: ServiceType;
 
   email: string;
@@ -107,7 +103,6 @@ export interface AppSettings {
   telegramChatId?: string | null;
   whatsappPhoneNumber?: string | null;
 
-  // ✅ plantillas
   telegramAccountTemplate?: string | null;
   telegramProfileTemplate?: string | null;
   saleMessageTemplate?: string | null;
@@ -158,7 +153,6 @@ interface StreamingContextType {
   getAllProfiles: () => Array<Profile & { accountName: string }>;
   getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
 
-  // ✅ ahora puede recibir serviceId o serviceName
   getServiceColor: (serviceRef: string) => string;
   getMaxProfilesByService: (serviceRef: ServiceType) => number;
 
@@ -190,6 +184,9 @@ async function fetchAPI(url: string, options?: RequestInit) {
 
   return res.json();
 }
+
+// ✅ NORMALIZADOR para match por nombre (evita bugs por mayúsculas/minúsculas/espacios)
+const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated } = useAuth();
@@ -233,12 +230,12 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
 
-  // ✅ Helpers: resolver servicio por ID y fallback por nombre
+  // ✅ Helpers: resolver servicio por ID y fallback por nombre (case-insensitive)
   const getServiceForAccount = (acc?: Partial<Account> | null) => {
     if (!acc) return null;
     const byId = acc.serviceId ? services.find((s) => s.id === acc.serviceId) : null;
     if (byId) return byId;
-    if (acc.serviceName) return services.find((s) => s.name === acc.serviceName) ?? null;
+    if (acc.serviceName) return services.find((s) => norm(s.name) === norm(acc.serviceName)) ?? null;
     return null;
   };
 
@@ -252,7 +249,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return svc?.maxProfiles || 7;
   };
 
-  // ✅ Backfill automático (1 vez): si cuentas viejas no tienen serviceId, intenta setearlo
+  // ✅ Backfill automático (1 vez): si cuentas viejas no tienen serviceId, intenta setearlo (case-insensitive)
   const didBackfillRef = useRef(false);
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -268,23 +265,29 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     didBackfillRef.current = true;
 
     (async () => {
+      let touched = 0;
+
       for (const acc of legacy) {
-        const svc = services.find((s) => s.name === acc.serviceName);
+        const svc = services.find((s) => norm(s.name) === norm(acc.serviceName));
         if (!svc) continue;
+
         try {
+          // ✅ además de serviceId, normalizamos el serviceName a la versión “actual” del servicio
           await fetchAPI(`/api/accounts/${acc.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ serviceId: svc.id }),
+            body: JSON.stringify({ serviceId: svc.id, serviceName: svc.name }),
           });
+          touched++;
         } catch {
           // si backend no soporta serviceId todavía, no pasa nada
         }
       }
 
-      // refrescar cuentas (por si backend sí guardó serviceId)
-      try {
-        await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
-      } catch {}
+      if (touched > 0) {
+        try {
+          await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+        } catch {}
+      }
     })();
   }, [isAuthenticated, accounts, services, queryClient]);
 
@@ -309,6 +312,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
     },
   });
 
@@ -328,7 +332,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const updateServiceMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Service> }) =>
       fetchAPI(`/api/services/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/services'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/services'] });
+      // ✅ por si hay UIs usando fallback por nombre, refrescamos cuentas también
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
   });
 
   const deleteServiceMutation = useMutation({
@@ -381,7 +389,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/settings'] }),
   });
 
-  // ✅ Crear cuenta: valida por serviceId y muestra el nombre actual del servicio
   const addAccount = async (newAccount: Omit<Account, 'id' | 'status' | 'userId' | 'createdAt'>) => {
     const maxProfiles = resolveMaxProfiles(newAccount);
 
@@ -422,7 +429,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ✅ ahora “eliminar” = archivar (según tu backend)
   const deleteAccount = async (id: string) => {
     try {
       await deleteAccountMutation.mutateAsync(id);
@@ -466,7 +472,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
       toast.error('El nombre del servicio no puede estar vacío');
       return null;
     }
-    if (services.some((s) => s.name === service.name)) {
+    if (services.some((s) => norm(s.name) === norm(service.name))) {
       toast.error('Este servicio ya existe');
       return null;
     }
@@ -679,21 +685,21 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return { totalSales, totalExpenses, netProfit, activeAccounts, expiringSoon };
   };
 
-  // ✅ ahora acepta serviceId o serviceName
+  // ✅ acepta serviceId o serviceName (case-insensitive)
   const getServiceColor = (serviceRef: string) => {
     const byId = services.find((s) => s.id === serviceRef);
     if (byId?.color) return byId.color;
 
-    const byName = services.find((s) => s.name === serviceRef);
+    const byName = services.find((s) => norm(s.name) === norm(serviceRef));
     return byName?.color || '#6366f1';
   };
 
-  // ✅ ahora acepta serviceId o serviceName
+  // ✅ acepta serviceId o serviceName (case-insensitive)
   const getMaxProfilesByService = (serviceRef: ServiceType) => {
     const byId = services.find((s) => s.id === serviceRef);
     if (byId?.maxProfiles) return byId.maxProfiles;
 
-    const byName = services.find((s) => s.name === serviceRef);
+    const byName = services.find((s) => norm(s.name) === norm(serviceRef));
     return byName?.maxProfiles || 7;
   };
 
