@@ -32,30 +32,11 @@ Tu servicio {{serviceName}} está por vencer el {{profileEndDate}}.
 ¿Deseas RENOVAR o ya NO usarás el servicio?
 Cualquier inconveniente, contáctanos ✅`;
 
-/** Template renderer tolerante */
 function renderTemplate(tpl: string, data: Record<string, any>) {
   return (tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, key) => {
     const v = data?.[key];
     return v === undefined || v === null ? "" : String(v);
   });
-}
-
-/** Normalizador para matching tolerante de nombres */
-function norm(s: any) {
-  return String(s ?? "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function buildServiceDisplayName(baseServiceName: string, planName?: string | null) {
-  const s = String(baseServiceName ?? "").trim();
-  const p = String(planName ?? "").trim();
-  if (!p) return s || "";
-  if (norm(p).includes(norm(s)) || norm(s).includes(norm(p))) return p;
-  return `${s} - ${p}`;
 }
 
 function ymdInTZ(d: Date, tz = TZ) {
@@ -102,34 +83,11 @@ async function sendTelegram(botToken: string, chatId: string, text: string) {
   }
 }
 
-/** Busca servicio por ID primero, luego fallback tolerante por nombre */
-function findServiceForAccount(
-  acc: any,
-  servicesById: Map<string, any>,
-  servicesList: any[]
-) {
-  const sid = String(acc?.serviceId ?? "").trim();
-  if (sid && servicesById.has(sid)) return servicesById.get(sid);
-
-  const accName = String(acc?.serviceName ?? "").trim();
-  if (!accName) return null;
-
-  const aN = norm(accName);
-
-  // exact normalizado
-  const exact = servicesList.find((s: any) => norm(s?.name) === aN);
-  if (exact) return exact;
-
-  // includes tolerante (HBO vs HBO MAX)
-  const candidates = servicesList
-    .filter((s: any) => {
-      const sn = norm(s?.name);
-      return sn && (sn.includes(aN) || aN.includes(sn));
-    })
-    .map((s: any) => ({ s, score: Math.min(norm(s?.name).length, aN.length) }))
-    .sort((a: any, b: any) => b.score - a.score);
-
-  return candidates[0]?.s ?? null;
+function buildServiceDisplay(baseServiceName: string, planName?: string | null) {
+  const base = String(baseServiceName ?? "").trim();
+  const plan = String(planName ?? "").trim();
+  if (plan) return base ? `${base} - ${plan}` : plan;
+  return base;
 }
 
 export async function runExpiryNotifications() {
@@ -162,44 +120,37 @@ export async function runExpiryNotifications() {
     const accountTpl = (s.telegramAccountTemplate || "").trim() || DEFAULT_ACCOUNT_TEMPLATE;
     const profileTpl = (s.telegramProfileTemplate || "").trim() || DEFAULT_PROFILE_TEMPLATE;
 
-    // ✅ cargar servicios del usuario (para reflejar nombres actualizados)
-    const userServices = await db
-      .select()
-      // usamos (services as any).userId por si el tipo no expone userId directamente
-      .from(services)
-      .where(eq((services as any).userId, s.userId));
-
-    const servicesById = new Map<string, any>();
-    for (const sv of userServices as any[]) {
-      if (sv?.id) servicesById.set(String(sv.id), sv);
-    }
-
-    // 1) cuentas maestras por vencer
+    // 1) cuentas maestras por vencer (con leftJoin a services para nombre actualizado)
     const userAccounts = await db
-      .select()
+      .select({
+        id: accounts.id,
+        userId: accounts.userId,
+        email: accounts.email,
+        password: accounts.password,
+        expirationDate: accounts.expirationDate,
+        serviceNameLegacy: accounts.serviceName,
+        planName: (accounts as any).planName, // por si TS te marca, depende tu typegen
+        serviceNameCurrent: services.name,
+      })
       .from(accounts)
+      .leftJoin(services, eq(accounts.serviceId, services.id))
       .where(and(eq(accounts.userId, s.userId), eq(accounts.isArchived, false)));
 
-    for (const a of userAccounts as any[]) {
+    for (const a of userAccounts) {
       if (!a.expirationDate) continue;
-
       const left = daysLeftInTZ(new Date(a.expirationDate as any), TZ);
       if (!daysSet.has(left)) continue;
 
-      const svc = findServiceForAccount(a, servicesById, userServices as any[]);
-      const baseServiceName = String(svc?.name ?? a.serviceName ?? "").trim();
-      const planName = String(a?.planName ?? "").trim();
-      const serviceDisplayName = buildServiceDisplayName(baseServiceName, planName);
+      const baseServiceName = String(a.serviceNameCurrent || a.serviceNameLegacy || "").trim();
+      const planName = String((a as any).planName ?? "").trim();
+      const serviceDisplayName = buildServiceDisplay(baseServiceName, planName);
 
-      // 🔥 clave: serviceName ahora incluye el plan si existe (sin tocar plantillas)
       const msg = renderTemplate(accountTpl, {
         daysLeft: left,
         serviceName: serviceDisplayName,
-
-        // extras opcionales
+        serviceDisplayName,
         baseServiceName,
         planName,
-        serviceDisplayName,
 
         accountEmail: a.email,
         accountPassword: a.password || "",
@@ -210,7 +161,7 @@ export async function runExpiryNotifications() {
       sent++;
     }
 
-    // 2) perfiles por vencer (con datos de la cuenta)
+    // 2) perfiles por vencer (con datos cuenta + services actual)
     const userProfiles = await db
       .select({
         profileId: profiles.id,
@@ -221,14 +172,13 @@ export async function runExpiryNotifications() {
 
         accountEmail: accounts.email,
         accountPassword: accounts.password,
-
-        // ✅ traer datos para resolver servicio/plan
-        accountServiceId: (accounts as any).serviceId,
-        accountServiceName: accounts.serviceName,
-        accountPlanName: (accounts as any).planName,
+        serviceNameLegacy: accounts.serviceName,
+        planName: (accounts as any).planName,
+        serviceNameCurrent: services.name,
       })
       .from(profiles)
       .innerJoin(accounts, eq(profiles.accountId, accounts.id))
+      .leftJoin(services, eq(accounts.serviceId, services.id))
       .where(
         and(
           eq(profiles.userId, s.userId),
@@ -237,32 +187,21 @@ export async function runExpiryNotifications() {
         )
       );
 
-    for (const p of userProfiles as any[]) {
+    for (const p of userProfiles) {
       if (!p.profileEndDate) continue;
-
       const left = daysLeftInTZ(new Date(p.profileEndDate as any), TZ);
       if (!daysSet.has(left)) continue;
 
-      // armamos un objeto "account-like" para reutilizar resolver
-      const accLike = {
-        serviceId: p.accountServiceId,
-        serviceName: p.accountServiceName,
-        planName: p.accountPlanName,
-      };
-
-      const svc = findServiceForAccount(accLike, servicesById, userServices as any[]);
-      const baseServiceName = String(svc?.name ?? p.accountServiceName ?? "").trim();
-      const planName = String(p.accountPlanName ?? "").trim();
-      const serviceDisplayName = buildServiceDisplayName(baseServiceName, planName);
+      const baseServiceName = String(p.serviceNameCurrent || p.serviceNameLegacy || "").trim();
+      const planName = String((p as any).planName ?? "").trim();
+      const serviceDisplayName = buildServiceDisplay(baseServiceName, planName);
 
       const msg = renderTemplate(profileTpl, {
         daysLeft: left,
         serviceName: serviceDisplayName,
-
-        // extras opcionales
+        serviceDisplayName,
         baseServiceName,
         planName,
-        serviceDisplayName,
 
         accountEmail: p.accountEmail,
         accountPassword: p.accountPassword || "",

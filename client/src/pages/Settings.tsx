@@ -26,7 +26,6 @@ export default function Settings() {
         telegramBotToken: settings.telegramBotToken || '',
         telegramChatId: settings.telegramChatId || '',
         whatsappPhoneNumber: settings.whatsappPhoneNumber || '',
-
         telegramAccountTemplate: settings.telegramAccountTemplate || '',
         telegramProfileTemplate: settings.telegramProfileTemplate || '',
         saleMessageTemplate: settings.saleMessageTemplate || '',
@@ -68,11 +67,8 @@ export default function Settings() {
       telegramBotToken: localSettings.telegramBotToken || null,
       telegramChatId: localSettings.telegramChatId || null,
       whatsappPhoneNumber: localSettings.whatsappPhoneNumber || null,
-
       telegramAccountTemplate: localSettings.telegramAccountTemplate || null,
       telegramProfileTemplate: localSettings.telegramProfileTemplate || null,
-
-      // también guardamos la plantilla de venta aquí (si ya está editada)
       saleMessageTemplate: localSettings.saleMessageTemplate || null,
     });
 
@@ -127,6 +123,7 @@ Tu servicio {{serviceName}} está por vencer el {{profileEndDate}}.
 ¿Deseas RENOVAR o ya NO usarás el servicio?
 Cualquier inconveniente, contáctanos ✅`;
 
+  // ✅ {{serviceName}} ahora en Ventas se llena con "Servicio - Plan" cuando exista planName.
   const defaultSaleMessageTpl = `Hola 👋🏻
 
 Aquí están tus datos de acceso:
@@ -356,15 +353,14 @@ Cualquier inconveniente, no dudes en contactarnos ✅`;
           <p className="text-xs text-muted-foreground">
             Variables:{' '}
             <code>{'{{serviceName}}'}</code>{' '}
+            <code>{'{{serviceDisplayName}}'}</code>{' '}
+            <code>{'{{baseServiceName}}'}</code>{' '}
+            <code>{'{{planName}}'}</code>{' '}
             <code>{'{{accountEmail}}'}</code>{' '}
             <code>{'{{accountPassword}}'}</code>{' '}
             <code>{'{{profileName}}'}</code>{' '}
-            <code>{'{{profileSlot}}'}</code>{' '}
             <code>{'{{pin}}'}</code>{' '}
-            <code>{'{{endDate}}'}</code>{' '}
-            <code>{'{{clientName}}'}</code>{' '}
-            <code>{'{{clientPhone}}'}</code>{' '}
-            <code>{'{{price}}'}</code>
+            <code>{'{{endDate}}'}</code>
           </p>
 
           <Button onClick={handleSaveSaleTemplate} className="bg-primary hover:bg-primary/90 text-white w-full">
