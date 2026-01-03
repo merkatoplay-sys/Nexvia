@@ -23,7 +23,19 @@ export const services = pgTable("services", {
 export const accounts = pgTable("accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull(),
+
+  // ✅ NUEVO: vínculo fuerte con services (recomendado)
+  // Nota: lo dejamos nullable para compatibilidad con cuentas viejas
+  serviceId: varchar("service_id")
+    .references(() => services.id, { onDelete: "set null" }),
+
+  // ✅ Servicio base (compatibilidad / fallback)
+  // Esto seguirá existiendo por si hay cuentas viejas sin serviceId
   serviceName: text("service_name").notNull(),
+
+  // ✅ NUEVO: Plan o nombre personalizado por cuenta (ej: "Premium 1 mes", "4K", etc)
+  planName: text("plan_name"),
+
   email: text("email").notNull(),
   password: text("password"),
   totalProfiles: integer("total_profiles").notNull(),
@@ -100,7 +112,7 @@ export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().unique(),
 
-  // ✅ Moneda fija: USD (dejamos columna por compatibilidad futura, pero la app la bloquea a USD)
+  // ✅ Moneda fija: USD
   defaultCurrency: varchar("default_currency", { length: 3 }).notNull().default("USD"),
 
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
@@ -111,7 +123,6 @@ export const settings = pgTable("settings", {
   telegramChatId: text("telegram_chat_id"),
   whatsappPhoneNumber: text("whatsapp_phone_number"),
 
-  // ✅ Plantillas personalizables
   telegramAccountTemplate: text("telegram_account_template"),
   telegramProfileTemplate: text("telegram_profile_template"),
   saleMessageTemplate: text("sale_message_template"),
@@ -121,8 +132,13 @@ export const settings = pgTable("settings", {
 });
 
 // Relations
-export const accountsRelations = relations(accounts, ({ many }) => ({
+export const accountsRelations = relations(accounts, ({ many, one }) => ({
   profiles: many(profiles),
+  // ✅ opcional: relación al servicio
+  service: one(services, {
+    fields: [accounts.serviceId],
+    references: [services.id],
+  }),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -160,7 +176,7 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   voidedAt: true,
 });
 
-// ✅ Settings: forzar USD en validación para evitar guardar otras monedas
+// ✅ Settings: forzar USD
 export const insertSettingsSchema = createInsertSchema(settings)
   .omit({
     id: true,

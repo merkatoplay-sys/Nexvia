@@ -57,6 +57,12 @@ const findServiceByName = (services: any[], name: any) => {
   return partial ?? null;
 };
 
+// ✅ construye el título que se muestra en la tarjeta: "Spotify Premium 1 mes"
+const buildAccountDisplayName = (serviceName: string, planName?: any) => {
+  const plan = String(planName ?? '').trim();
+  return plan ? `${serviceName} ${plan}` : serviceName;
+};
+
 export default function Accounts() {
   const {
     accounts,
@@ -99,10 +105,13 @@ export default function Accounts() {
     email: '',
   });
 
-  // ✅ serviceId + expirationDate (dd/MM/yyyy)
-  const [newAccount, setNewAccount] = useState<Partial<Account> & { serviceId?: string; expirationDate?: string }>({
+  // ✅ serviceId + planName + expirationDate (dd/MM/yyyy)
+  const [newAccount, setNewAccount] = useState<
+    Partial<Account> & { serviceId?: string; expirationDate?: string; planName?: string }
+  >({
     serviceId: '',
     serviceName: '',
+    planName: '',
     totalProfiles: 5,
     isRenewable: true,
     expirationDate: '',
@@ -117,6 +126,7 @@ export default function Accounts() {
     expirationDate: '', // dd/MM/yyyy
     cost: 0,
     isRenewable: true,
+    planName: '', // ✅ nuevo
   });
 
   // Mover perfiles
@@ -171,11 +181,14 @@ export default function Accounts() {
   const filteredAccounts = useMemo(() => {
     return accountsSafe.filter((acc: any) => {
       const service = getServiceForAccount(acc);
-      const serviceName = service?.name ?? acc.serviceName ?? '';
+      const serviceBaseName = service?.name ?? acc.serviceName ?? '';
+
+      const displayName = buildAccountDisplayName(serviceBaseName, acc.planName);
 
       const matchesSearch =
         (acc.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        serviceName.toLowerCase().includes(searchTerm.toLowerCase());
+        serviceBaseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        displayName.toLowerCase().includes(searchTerm.toLowerCase());
 
       // ✅ filtro por serviceId, con fallback por nombre para cuentas viejas (más robusto)
       const matchesService =
@@ -194,6 +207,7 @@ export default function Accounts() {
     const svc = getServiceForNewAccount();
     const serviceId = newAccount.serviceId || svc?.id || '';
     const serviceName = svc?.name || newAccount.serviceName || '';
+    const planName = String(newAccount.planName ?? '').trim();
 
     if (!serviceId || !serviceName) return;
     if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
@@ -213,6 +227,7 @@ export default function Accounts() {
     const success = await addAccount({
       serviceId,
       serviceName,
+      planName: planName ? planName : null, // ✅ nuevo
       email: newAccount.email || '',
       password: newAccount.password || '',
       totalProfiles: Number(newAccount.totalProfiles || 5),
@@ -227,7 +242,14 @@ export default function Accounts() {
     if (success) {
       setIsAddOpen(false);
       setShowNewAccountPassword(false);
-      setNewAccount({ serviceId: '', serviceName: '', totalProfiles: 5, isRenewable: true, expirationDate: '' });
+      setNewAccount({
+        serviceId: '',
+        serviceName: '',
+        planName: '',
+        totalProfiles: 5,
+        isRenewable: true,
+        expirationDate: '',
+      });
     }
   };
 
@@ -358,6 +380,22 @@ export default function Accounts() {
                 </div>
               </div>
 
+              {/* ✅ NUEVO: Plan/Nombre */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Plan / Nombre (opcional)</label>
+                <Input
+                  className="glass-input"
+                  placeholder="Ej: Premium 1 mes, 4K, 3 meses..."
+                  value={newAccount.planName || ''}
+                  onChange={(e) => setNewAccount({ ...newAccount, planName: e.target.value })}
+                  autoComplete="off"
+                  name="planName"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Se mostrará como: <span className="text-white">{buildAccountDisplayName(newAccount.serviceName || 'Servicio', newAccount.planName)}</span>
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Email de la cuenta</label>
                 <Input
@@ -466,7 +504,7 @@ export default function Accounts() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9 glass-input bg-background/20"
-            placeholder="Buscar por email o servicio..."
+            placeholder="Buscar por email, servicio o plan..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             data-testid="input-search"
@@ -519,11 +557,12 @@ export default function Accounts() {
             const daysLeft = differenceInDays(new Date(account.expirationDate), new Date());
 
             const svc = getServiceForAccount(account);
-            const serviceName = svc?.name ?? account.serviceName ?? 'Servicio';
+            const serviceBaseName = svc?.name ?? account.serviceName ?? 'Servicio';
+            const displayTitle = buildAccountDisplayName(serviceBaseName, account.planName);
 
             const serviceColor =
               svc?.color ??
-              (getServiceColor?.((svc?.id || account.serviceId || serviceName) as any) as string) ??
+              (getServiceColor?.((svc?.id || account.serviceId || serviceBaseName) as any) as string) ??
               '#6366f1';
 
             const serviceImage = getServiceImage(svc);
@@ -563,19 +602,20 @@ export default function Accounts() {
                           {serviceImage ? (
                             <img
                               src={serviceImage}
-                              alt={serviceName}
+                              alt={serviceBaseName}
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 (e.currentTarget as HTMLImageElement).style.display = 'none';
                               }}
                             />
                           ) : (
-                            <span>{String(serviceName).substring(0, 1)}</span>
+                            <span>{String(serviceBaseName).substring(0, 1)}</span>
                           )}
                         </div>
 
                         <div className="min-w-0">
-                          <CardTitle className="text-lg text-white">{serviceName}</CardTitle>
+                          {/* ✅ ahora muestra Servicio + Plan */}
+                          <CardTitle className="text-lg text-white">{displayTitle}</CardTitle>
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
 
                           <div className="flex items-center gap-2 mt-1">
@@ -643,9 +683,12 @@ export default function Accounts() {
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
-                                expirationDate: account.expirationDate ? format(new Date(account.expirationDate), 'dd/MM/yyyy') : '',
+                                expirationDate: account.expirationDate
+                                  ? format(new Date(account.expirationDate), 'dd/MM/yyyy')
+                                  : '',
                                 cost: Number(account.cost || 0),
                                 isRenewable: !!account.isRenewable,
+                                planName: String(account.planName ?? ''), // ✅ nuevo
                               });
                               setEditAccountOpen(true);
                             }}
@@ -657,7 +700,7 @@ export default function Accounts() {
                             size="sm"
                             variant="ghost"
                             onClick={() =>
-                              setDeleteConfirm({ open: true, id: account.id, name: serviceName, email: account.email })
+                              setDeleteConfirm({ open: true, id: account.id, name: displayTitle, email: account.email })
                             }
                             className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
                             title="Eliminar"
@@ -673,7 +716,9 @@ export default function Accounts() {
                     <div className="grid grid-cols-2 gap-2 mb-4">
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Inicio</span>
-                        <span className="text-xs font-medium text-white">{format(new Date(account.startDate), 'dd MMM')}</span>
+                        <span className="text-xs font-medium text-white">
+                          {format(new Date(account.startDate), 'dd MMM')}
+                        </span>
                       </div>
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Vence</span>
@@ -710,7 +755,7 @@ export default function Accounts() {
 
                             if (profile.status === 'disponible') {
                               const finalServiceId = account.serviceId || svc?.id || '';
-                              goSellFromSlot(finalServiceId, serviceName, account.id, profile);
+                              goSellFromSlot(finalServiceId, serviceBaseName, account.id, profile);
                             }
                           }}
                           title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
@@ -877,6 +922,22 @@ export default function Accounts() {
             <p className="text-sm text-muted-foreground">No hay cuenta seleccionada.</p>
           ) : (
             <div className="grid gap-4 py-4">
+              {/* ✅ NUEVO: Plan/Nombre */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Plan / Nombre</label>
+                <Input
+                  className="glass-input"
+                  placeholder="Ej: Premium 3 meses, 4K..."
+                  value={editAccountData.planName}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, planName: e.target.value })}
+                  autoComplete="off"
+                  name="planNameEdit"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Nota: El servicio no se puede cambiar, solo el nombre/plan.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Email</label>
                 <Input
@@ -982,9 +1043,12 @@ export default function Accounts() {
                   expISO = parsed.toISOString();
                 }
 
+                const plan = String(editAccountData.planName ?? '').trim();
+
                 const ok = await updateAccount(
                   editingAccount.id,
                   {
+                    planName: plan ? plan : null, // ✅ nuevo
                     email: editAccountData.email,
                     password: editAccountData.password,
                     expirationDate: expISO,
@@ -1011,9 +1075,7 @@ export default function Accounts() {
           <DialogHeader>
             <DialogTitle>
               Mover perfiles{' '}
-              {moveFromAccount
-                ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})`
-                : ''}
+              {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -1086,7 +1148,10 @@ export default function Accounts() {
 
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {activeProfilesOfFrom.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between p-2 rounded-md bg-white/5 border border-white/10">
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between p-2 rounded-md bg-white/5 border border-white/10"
+                    >
                       <div>
                         <p className="text-sm text-white font-medium">{p.name}</p>
                         <p className="text-xs text-muted-foreground">{p.phone || 'Sin teléfono'}</p>

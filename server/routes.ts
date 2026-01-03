@@ -27,6 +27,9 @@ function toDate(val: any): Date | undefined {
   return d;
 }
 
+// ✅ normalizador
+const norm = (v: any) => String(v ?? "").trim().toLowerCase();
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -245,7 +248,7 @@ export async function registerRoutes(
     }
   });
 
-  // Crear cuenta: registra gasto por cost
+  // ✅ Crear cuenta: valida servicio, guarda serviceId fijo y planName editable
   app.post("/api/accounts", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -254,18 +257,43 @@ export async function registerRoutes(
       const expirationDate =
         toDate(req.body?.expirationDate) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+      const servicesList = await storage.getServices(userId);
+
+      const incomingServiceId = String(req.body?.serviceId ?? "").trim();
+      const incomingServiceName = String(req.body?.serviceName ?? req.body?.service ?? "").trim();
+
+      const svc =
+        (incomingServiceId ? servicesList.find((s: any) => s.id === incomingServiceId) : null) ||
+        (incomingServiceName ? servicesList.find((s: any) => norm(s.name) === norm(incomingServiceName)) : null);
+
+      // ✅ Permitimos fallback por nombre (legacy), pero si no existe nada => error
+      if (!svc && !incomingServiceName) {
+        return res.status(400).json({ message: "Servicio inválido o no proporcionado" });
+      }
+
+      const planName = String(req.body?.planName ?? "").trim() || null;
+
       const account = await storage.createAccount({
         ...req.body,
         userId,
         startDate,
         expirationDate,
+
+        // ✅ si existe servicio, lo fijamos bien
+        serviceId: svc?.id ?? (req.body?.serviceId ?? null),
+        serviceName: svc?.name ?? incomingServiceName,
+
+        // ✅ plan editable
+        planName,
       } as any);
 
       const cost = Number(req.body?.cost ?? 0);
       if (cost > 0) {
+        const label = account.planName ? `${account.serviceName} - ${account.planName}` : account.serviceName;
+
         await storage.createExpense({
           userId,
-          description: `Compra cuenta ${account.serviceName} (${account.email})`,
+          description: `Compra cuenta ${label} (${account.email})`,
           amount: cost,
           type: "gasto",
           accountId: account.id,
@@ -283,10 +311,15 @@ export async function registerRoutes(
     }
   });
 
-  // Update cuenta
+  // ✅ Update cuenta: bloquea cambio de servicio, permite planName
   app.patch("/api/accounts/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const accountId = req.params.id;
+
+      const accountsList = await storage.getAccounts(userId);
+      const current = accountsList.find(a => a.id === accountId);
+      if (!current) return res.status(404).json({ message: "Cuenta no encontrada" });
 
       const updates: any = { ...req.body };
       if ("startDate" in updates) updates.startDate = toDate(updates.startDate);
@@ -294,7 +327,35 @@ export async function registerRoutes(
       if ("soldStartDate" in updates) updates.soldStartDate = toDate(updates.soldStartDate);
       if ("soldEndDate" in updates) updates.soldEndDate = toDate(updates.soldEndDate);
 
-      const account = await storage.updateAccount(req.params.id, userId, updates);
+      // ✅ Normaliza planName (editable)
+      if ("planName" in updates) {
+        const pn = String(updates.planName ?? "").trim();
+        updates.planName = pn ? pn : null;
+      }
+
+      // ✅ Bloqueo de servicio:
+      // - si ya tiene serviceId => NO permitir cambiar serviceId/serviceName
+      // - si NO tiene serviceId (legacy) => permitir setear serviceId UNA VEZ y normalizar serviceName
+      const wantsServiceId = String(updates.serviceId ?? "").trim();
+
+      if (current.serviceId) {
+        delete updates.serviceId;
+        delete updates.serviceName;
+      } else {
+        if (wantsServiceId) {
+          const servicesList = await storage.getServices(userId);
+          const svc = servicesList.find((s: any) => s.id === wantsServiceId);
+          if (!svc) return res.status(400).json({ message: "Servicio inválido" });
+
+          updates.serviceId = svc.id;
+          updates.serviceName = svc.name;
+        } else {
+          // no aceptamos "inventar" serviceName en updates
+          delete updates.serviceName;
+        }
+      }
+
+      const account = await storage.updateAccount(accountId, userId, updates);
       res.json(account);
     } catch (error) {
       console.error("Error updating account:", error);
@@ -543,8 +604,6 @@ export async function registerRoutes(
 
       const payload = {
         ...req.body,
-
-        // fuerza moneda
         defaultCurrency: "USD",
       };
 
@@ -557,7 +616,6 @@ export async function registerRoutes(
   });
 
   // ✅✅✅ NUEVO: Endpoint para cron de notificaciones Telegram
-  // Llamar así:
   // GET /api/cron/notify?secret=TU_SECRETO
   app.get("/api/cron/notify", async (req, res) => {
     const secret = String(req.query.secret || "");

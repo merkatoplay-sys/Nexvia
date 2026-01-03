@@ -42,6 +42,9 @@ export interface Account {
   serviceId?: string | null;
   serviceName: ServiceType;
 
+  // ✅ NUEVO: Plan/Nombre por cuenta (editable)
+  planName?: string | null;
+
   email: string;
   password?: string | null;
   totalProfiles: number;
@@ -188,6 +191,12 @@ async function fetchAPI(url: string, options?: RequestInit) {
 // ✅ NORMALIZADOR para match por nombre (evita bugs por mayúsculas/minúsculas/espacios)
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
+// ✅ construye nombre para mostrar: "Spotify Premium 1 mes"
+const buildDisplayName = (serviceName: string, planName?: any) => {
+  const plan = String(planName ?? '').trim();
+  return plan ? `${serviceName} ${plan}` : serviceName;
+};
+
 export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
@@ -239,9 +248,11 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return null;
   };
 
+  // ✅ ahora devuelve nombre compuesto con planName
   const resolveServiceName = (acc?: Partial<Account> | null) => {
     const svc = getServiceForAccount(acc);
-    return svc?.name ?? acc?.serviceName ?? 'Servicio';
+    const base = svc?.name ?? acc?.serviceName ?? 'Servicio';
+    return buildDisplayName(base, (acc as any)?.planName);
   };
 
   const resolveMaxProfiles = (acc?: Partial<Account> | null) => {

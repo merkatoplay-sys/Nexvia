@@ -18,7 +18,7 @@ import {
   type Settings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, or } from "drizzle-orm";
 
 /**
  * Drizzle timestamp necesita Date.
@@ -37,6 +37,9 @@ function toDateOrNull(value: unknown): Date | null {
 
   return null;
 }
+
+// ✅ normalizador
+const norm = (v: any) => String(v ?? "").trim().toLowerCase();
 
 export interface IStorage {
   // Services
@@ -141,10 +144,19 @@ export class DatabaseStorage implements IStorage {
 
     if (!service) return;
 
+    // ✅ Cambiado: ahora también buscamos por serviceId (nuevo) o por serviceName (legacy)
     const serviceAccounts = await db
       .select()
       .from(accounts)
-      .where(and(eq(accounts.serviceName, service.name), eq(accounts.userId, userId)));
+      .where(
+        and(
+          eq(accounts.userId, userId),
+          or(
+            eq(accounts.serviceId, service.id),
+            eq(accounts.serviceName, service.name)
+          )
+        )
+      );
 
     for (const account of serviceAccounts) {
       await this.deleteAccount(account.id, userId); // archiva
@@ -204,6 +216,12 @@ export class DatabaseStorage implements IStorage {
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
+    // normaliza planName
+    if ("planName" in payload) {
+      const pn = String(payload.planName ?? "").trim();
+      payload.planName = pn ? pn : null;
+    }
+
     const totalSlots = Number(payload.totalProfiles || 0);
 
     const result = await db.transaction(async (tx) => {
@@ -236,6 +254,12 @@ export class DatabaseStorage implements IStorage {
 
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
+
+    // normaliza planName
+    if ("planName" in payload) {
+      const pn = String(payload.planName ?? "").trim();
+      payload.planName = pn ? pn : null;
+    }
 
     const [updated] = await db
       .update(accounts)
@@ -320,7 +344,14 @@ export class DatabaseStorage implements IStorage {
     if (!fromAccount) throw new Error("Cuenta origen no encontrada");
     if (!toAccount) throw new Error("Cuenta destino no encontrada");
 
-    if (fromAccount.serviceName !== toAccount.serviceName) {
+    // ✅ Cambiado: compara por serviceId si ambos tienen, sino por serviceName (legacy)
+    const sameService =
+      (fromAccount.serviceId && toAccount.serviceId && fromAccount.serviceId === toAccount.serviceId) ||
+      (!fromAccount.serviceId && !toAccount.serviceId && norm(fromAccount.serviceName) === norm(toAccount.serviceName)) ||
+      // caso mixto (uno legacy, otro nuevo): comparamos por nombre para permitir migraciones
+      (norm(fromAccount.serviceName) === norm(toAccount.serviceName));
+
+    if (!sameService) {
       throw new Error("No puedes mover perfiles entre servicios distintos");
     }
 
