@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { accounts, profiles, settings } from "@shared/schema";
+import { accounts, profiles, settings, services } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 
 const TZ = "America/Guatemala";
@@ -32,11 +32,30 @@ Tu servicio {{serviceName}} está por vencer el {{profileEndDate}}.
 ¿Deseas RENOVAR o ya NO usarás el servicio?
 Cualquier inconveniente, contáctanos ✅`;
 
+/** Template renderer tolerante */
 function renderTemplate(tpl: string, data: Record<string, any>) {
   return (tpl || "").replace(/\{\{(\w+)\}\}/g, (_m, key) => {
     const v = data?.[key];
     return v === undefined || v === null ? "" : String(v);
   });
+}
+
+/** Normalizador para matching tolerante de nombres */
+function norm(s: any) {
+  return String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function buildServiceDisplayName(baseServiceName: string, planName?: string | null) {
+  const s = String(baseServiceName ?? "").trim();
+  const p = String(planName ?? "").trim();
+  if (!p) return s || "";
+  if (norm(p).includes(norm(s)) || norm(s).includes(norm(p))) return p;
+  return `${s} - ${p}`;
 }
 
 function ymdInTZ(d: Date, tz = TZ) {
@@ -83,6 +102,36 @@ async function sendTelegram(botToken: string, chatId: string, text: string) {
   }
 }
 
+/** Busca servicio por ID primero, luego fallback tolerante por nombre */
+function findServiceForAccount(
+  acc: any,
+  servicesById: Map<string, any>,
+  servicesList: any[]
+) {
+  const sid = String(acc?.serviceId ?? "").trim();
+  if (sid && servicesById.has(sid)) return servicesById.get(sid);
+
+  const accName = String(acc?.serviceName ?? "").trim();
+  if (!accName) return null;
+
+  const aN = norm(accName);
+
+  // exact normalizado
+  const exact = servicesList.find((s: any) => norm(s?.name) === aN);
+  if (exact) return exact;
+
+  // includes tolerante (HBO vs HBO MAX)
+  const candidates = servicesList
+    .filter((s: any) => {
+      const sn = norm(s?.name);
+      return sn && (sn.includes(aN) || aN.includes(sn));
+    })
+    .map((s: any) => ({ s, score: Math.min(norm(s?.name).length, aN.length) }))
+    .sort((a: any, b: any) => b.score - a.score);
+
+  return candidates[0]?.s ?? null;
+}
+
 export async function runExpiryNotifications() {
   const allSettings = await db.select().from(settings);
 
@@ -113,20 +162,45 @@ export async function runExpiryNotifications() {
     const accountTpl = (s.telegramAccountTemplate || "").trim() || DEFAULT_ACCOUNT_TEMPLATE;
     const profileTpl = (s.telegramProfileTemplate || "").trim() || DEFAULT_PROFILE_TEMPLATE;
 
+    // ✅ cargar servicios del usuario (para reflejar nombres actualizados)
+    const userServices = await db
+      .select()
+      // usamos (services as any).userId por si el tipo no expone userId directamente
+      .from(services)
+      .where(eq((services as any).userId, s.userId));
+
+    const servicesById = new Map<string, any>();
+    for (const sv of userServices as any[]) {
+      if (sv?.id) servicesById.set(String(sv.id), sv);
+    }
+
     // 1) cuentas maestras por vencer
     const userAccounts = await db
       .select()
       .from(accounts)
       .where(and(eq(accounts.userId, s.userId), eq(accounts.isArchived, false)));
 
-    for (const a of userAccounts) {
+    for (const a of userAccounts as any[]) {
       if (!a.expirationDate) continue;
+
       const left = daysLeftInTZ(new Date(a.expirationDate as any), TZ);
       if (!daysSet.has(left)) continue;
 
+      const svc = findServiceForAccount(a, servicesById, userServices as any[]);
+      const baseServiceName = String(svc?.name ?? a.serviceName ?? "").trim();
+      const planName = String(a?.planName ?? "").trim();
+      const serviceDisplayName = buildServiceDisplayName(baseServiceName, planName);
+
+      // 🔥 clave: serviceName ahora incluye el plan si existe (sin tocar plantillas)
       const msg = renderTemplate(accountTpl, {
         daysLeft: left,
-        serviceName: a.serviceName,
+        serviceName: serviceDisplayName,
+
+        // extras opcionales
+        baseServiceName,
+        planName,
+        serviceDisplayName,
+
         accountEmail: a.email,
         accountPassword: a.password || "",
         accountEndDate: formatDateGT(new Date(a.expirationDate as any), TZ),
@@ -147,7 +221,11 @@ export async function runExpiryNotifications() {
 
         accountEmail: accounts.email,
         accountPassword: accounts.password,
-        serviceName: accounts.serviceName,
+
+        // ✅ traer datos para resolver servicio/plan
+        accountServiceId: (accounts as any).serviceId,
+        accountServiceName: accounts.serviceName,
+        accountPlanName: (accounts as any).planName,
       })
       .from(profiles)
       .innerJoin(accounts, eq(profiles.accountId, accounts.id))
@@ -159,14 +237,33 @@ export async function runExpiryNotifications() {
         )
       );
 
-    for (const p of userProfiles) {
+    for (const p of userProfiles as any[]) {
       if (!p.profileEndDate) continue;
+
       const left = daysLeftInTZ(new Date(p.profileEndDate as any), TZ);
       if (!daysSet.has(left)) continue;
 
+      // armamos un objeto "account-like" para reutilizar resolver
+      const accLike = {
+        serviceId: p.accountServiceId,
+        serviceName: p.accountServiceName,
+        planName: p.accountPlanName,
+      };
+
+      const svc = findServiceForAccount(accLike, servicesById, userServices as any[]);
+      const baseServiceName = String(svc?.name ?? p.accountServiceName ?? "").trim();
+      const planName = String(p.accountPlanName ?? "").trim();
+      const serviceDisplayName = buildServiceDisplayName(baseServiceName, planName);
+
       const msg = renderTemplate(profileTpl, {
         daysLeft: left,
-        serviceName: p.serviceName,
+        serviceName: serviceDisplayName,
+
+        // extras opcionales
+        baseServiceName,
+        planName,
+        serviceDisplayName,
+
         accountEmail: p.accountEmail,
         accountPassword: p.accountPassword || "",
         profileName: p.profileName,

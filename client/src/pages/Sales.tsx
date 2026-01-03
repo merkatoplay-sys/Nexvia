@@ -46,6 +46,24 @@ const applyTemplate = (tpl: string, vars: Record<string, string>) => {
   return tpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, k) => vars[k] ?? '');
 };
 
+// ✅ normalizador tolerante para matching de servicios
+const norm = (s: any) =>
+  String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quita tildes
+    .replace(/[^a-z0-9]+/g, ''); // quita espacios/símbolos
+
+const buildServiceDisplayName = (baseServiceName: string, planName?: string | null) => {
+  const s = String(baseServiceName ?? '').trim();
+  const p = String(planName ?? '').trim();
+  if (!p) return s || '';
+  // si el plan ya incluye el nombre del servicio, no duplicar
+  if (norm(p).includes(norm(s)) || norm(s).includes(norm(p))) return p;
+  return `${s} - ${p}`;
+};
+
 export default function Sales() {
   const { accounts, services, sellProfile, sellAccount, clients, settings } = useStreaming();
   const [location] = useLocation();
@@ -57,17 +75,46 @@ export default function Sales() {
   // --- helpers serviceId ---
   const getServiceById = (id?: string) => (id ? servicesSafe.find((s: any) => s.id === id) ?? null : null);
 
+  // ✅ resolver servicio para una cuenta (ID > fallback nombre tolerante)
   const getServiceForAccount = (acc: any) => {
     if (!acc) return null;
+
+    // 1) por ID
     const byId = acc.serviceId ? getServiceById(acc.serviceId) : null;
     if (byId) return byId;
-    if (acc.serviceName) return servicesSafe.find((s: any) => s.name === acc.serviceName) ?? null;
-    return null;
+
+    // 2) fallback por nombre: exacto normalizado
+    const accName = String(acc.serviceName ?? '').trim();
+    if (!accName) return null;
+
+    const accN = norm(accName);
+    let exact = servicesSafe.find((s: any) => norm(s?.name) === accN) ?? null;
+    if (exact) return exact;
+
+    // 3) fallback tolerante por "includes" (ej: HBO vs HBO MAX)
+    const candidates = servicesSafe
+      .filter((s: any) => {
+        const sn = norm(s?.name);
+        return sn && (sn.includes(accN) || accN.includes(sn));
+      })
+      .map((s: any) => ({
+        s,
+        score: Math.min(norm(s?.name).length, accN.length), // preferir match más “largo”
+      }))
+      .sort((a: any, b: any) => b.score - a.score);
+
+    return candidates[0]?.s ?? null;
   };
 
-  const getServiceNameForAccount = (acc: any) => {
+  const getBaseServiceNameForAccount = (acc: any) => {
     const svc = getServiceForAccount(acc);
     return svc?.name ?? acc?.serviceName ?? '';
+  };
+
+  // ✅ NOMBRE A MOSTRAR (Servicio + Plan cuando exista)
+  const getServiceDisplayNameForAccount = (acc: any) => {
+    const base = getBaseServiceNameForAccount(acc);
+    return buildServiceDisplayName(base, acc?.planName);
   };
 
   const getServiceColorForAccount = (acc: any) => {
@@ -123,7 +170,10 @@ export default function Sales() {
     if (serviceIdQP) {
       setSelectedServiceId(serviceIdQP);
     } else if (serviceNameQP) {
-      const found = servicesSafe.find((s: any) => s.name === serviceNameQP);
+      const targetN = norm(serviceNameQP);
+      const found =
+        servicesSafe.find((s: any) => norm(s?.name) === targetN) ??
+        servicesSafe.find((s: any) => norm(s?.name).includes(targetN) || targetN.includes(norm(s?.name)));
       if (found?.id) setSelectedServiceId(found.id);
     }
 
@@ -155,9 +205,14 @@ export default function Sales() {
     if (!selectedServiceId) return accountsSafe;
 
     const svc = getServiceById(selectedServiceId);
+    const svcN = norm(svc?.name);
+
     return accountsSafe.filter((a: any) => {
       if (a.serviceId) return a.serviceId === selectedServiceId;
-      return svc?.name && a.serviceName === svc.name;
+
+      // fallback por nombre tolerante
+      const aN = norm(a.serviceName);
+      return !!svcN && !!aN && (aN === svcN || aN.includes(svcN) || svcN.includes(aN));
     });
   }, [accountsSafe, selectedServiceId, servicesSafe]);
 
@@ -234,6 +289,7 @@ export default function Sales() {
     }, 0);
   };
 
+  // ✅ ahora genera variables completas + serviceName = "Servicio - Plan" si existe
   const buildMessage = (accountId: string, profileId: string) => {
     const acc = accountsSafe.find((a: any) => a.id === accountId);
     if (!acc) return '';
@@ -247,13 +303,37 @@ export default function Sales() {
 
     const endDateRaw = prof?.endDate || acc.soldEndDate || acc.expirationDate || '';
 
+    const baseServiceName = String(getBaseServiceNameForAccount(acc) ?? '');
+    const planName = String(acc?.planName ?? '').trim();
+    const serviceDisplayName = String(getServiceDisplayNameForAccount(acc) ?? '');
+
+    // slot (si se encuentra)
+    const idx = prof ? (acc.profiles ?? []).findIndex((p: any) => p.id === prof.id) : -1;
+    const profileSlot = idx >= 0 ? String(idx + 1) : '';
+
+    // cliente
+    const clientName = prof?.clientId
+      ? String(clientsSafe.find((c: any) => c.id === prof.clientId)?.name ?? '')
+      : '';
+    const clientPhone = prof?.phone ? String(prof.phone ?? '') : '';
+
     const vars: Record<string, string> = {
-      serviceName: String(getServiceNameForAccount(acc) ?? ''),
+      // 🔥 importante: para no obligarte a cambiar tu plantilla, {{serviceName}} ya incluye Plan si existe
+      serviceName: serviceDisplayName,
+
+      // adicionales (por si quieres usarlas en plantilla)
+      baseServiceName,
+      planName,
+      serviceDisplayName,
       accountEmail: String(acc.email ?? ''),
       accountPassword: String((acc as any).password ?? ''),
       profileName: prof ? String(prof.name ?? '') : 'Cuenta completa',
+      profileSlot,
       pin: prof ? String(prof.pin ?? '') : '',
       endDate: formatSpanishLongDate(endDateRaw),
+      clientName,
+      clientPhone,
+      price: prof?.price != null ? String(prof.price) : '',
     };
 
     return applyTemplate(tpl, vars).trim();
@@ -354,7 +434,7 @@ export default function Sales() {
                 </div>
               </div>
 
-              {/* ✅ Servicio (con color/logo) */}
+              {/* ✅ Servicio */}
               <div className="space-y-2">
                 <label className="text-[11px] sm:text-xs text-muted-foreground">Servicio</label>
                 <Select
@@ -407,7 +487,6 @@ export default function Sales() {
 
               {!!selectedServiceId && (
                 <div className="space-y-2">
-                  {/* ✅ en móvil: label más corto */}
                   <label className="text-[11px] sm:text-xs text-muted-foreground">Cuenta</label>
                   <Select
                     value={selectedAccountId}
@@ -429,14 +508,13 @@ export default function Sales() {
                         const disableForAccount = saleMode === 'cuenta' && sold;
                         const disabled = disableForProfile || disableForAccount;
 
-                        const svcName = getServiceNameForAccount(acc);
                         const svcColor = getServiceColorForAccount(acc);
                         const svcImg = getServiceImageForAccount(acc);
+                        const svcLabel = getServiceDisplayNameForAccount(acc) || getBaseServiceNameForAccount(acc) || 'Servicio';
 
                         return (
                           <SelectItem key={acc.id} value={acc.id} disabled={disabled}>
                             <div className="flex items-center gap-2 min-w-0">
-                              {/* ✅ mini indicador (solo dentro del dropdown, no roba espacio) */}
                               <span
                                 className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center text-white text-[9px] font-bold shrink-0"
                                 style={{ backgroundColor: svcColor }}
@@ -444,14 +522,14 @@ export default function Sales() {
                                 {svcImg ? (
                                   <img
                                     src={svcImg}
-                                    alt={svcName}
+                                    alt={svcLabel}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
                                       (e.currentTarget as HTMLImageElement).style.display = 'none';
                                     }}
                                   />
                                 ) : (
-                                  String(svcName || 'S').substring(0, 1)
+                                  String(svcLabel || 'S').substring(0, 1)
                                 )}
                               </span>
                               <span className="truncate">
@@ -486,7 +564,6 @@ export default function Sales() {
               )}
 
               <div className="space-y-2">
-                {/* ✅ más compacto en móvil */}
                 <label className="text-[11px] sm:text-xs text-muted-foreground">Cliente</label>
                 <Input
                   className="glass-input h-9 sm:h-10"
@@ -641,7 +718,8 @@ export default function Sales() {
           const realAvailable = realProfiles.filter((p: any) => p.status === 'disponible');
           const availableCount = displayProfiles.filter((p: any) => p.status === 'disponible').length;
 
-          const serviceName = getServiceNameForAccount(account);
+          const serviceDisplayName = getServiceDisplayNameForAccount(account);
+          const baseServiceName = getBaseServiceNameForAccount(account);
           const serviceColor = getServiceColorForAccount(account);
           const serviceImage = getServiceImageForAccount(account);
 
@@ -659,16 +737,25 @@ export default function Sales() {
                           {serviceImage ? (
                             <img
                               src={serviceImage}
-                              alt={serviceName}
+                              alt={serviceDisplayName || baseServiceName}
                               className="w-full h-full object-cover"
                               onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
                             />
                           ) : (
-                            String(serviceName || 'S').substring(0, 1)
+                            String(serviceDisplayName || baseServiceName || 'S').substring(0, 1)
                           )}
                         </div>
 
-                        <CardTitle className="text-sm sm:text-base text-white truncate">{serviceName}</CardTitle>
+                        <div className="min-w-0">
+                          <CardTitle className="text-sm sm:text-base text-white truncate">
+                            {serviceDisplayName || baseServiceName}
+                          </CardTitle>
+                          {!!account?.planName && (
+                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+                              Plan: {String(account.planName)}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
                       <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{account.email}</p>

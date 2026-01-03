@@ -25,6 +25,23 @@ const money = (v: any) => {
   return `$${n}`;
 };
 
+// ✅ normalizador tolerante para matching de servicios
+const norm = (s: any) =>
+  String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+
+const buildServiceDisplayName = (baseServiceName: string, planName?: string | null) => {
+  const s = String(baseServiceName ?? '').trim();
+  const p = String(planName ?? '').trim();
+  if (!p) return s || '';
+  if (norm(p).includes(norm(s)) || norm(s).includes(norm(p))) return p;
+  return `${s} - ${p}`;
+};
+
 export default function Profiles() {
   const { accounts, clients, updateProfile, renewProfile, deleteProfile, services, getServiceColor } = useStreaming();
 
@@ -32,18 +49,40 @@ export default function Profiles() {
   const clientsSafe = clients ?? [];
   const servicesSafe = services ?? [];
 
-  // helpers servicio (ID primero, fallback por nombre)
+  // ✅ resolver servicio para una cuenta (ID > fallback tolerante)
   const getServiceForAccount = (acc: any) => {
     if (!acc) return null;
+
     const byId = acc.serviceId ? servicesSafe.find((s: any) => s.id === acc.serviceId) : null;
     if (byId) return byId;
-    if (acc.serviceName) return servicesSafe.find((s: any) => s.name === acc.serviceName) ?? null;
-    return null;
+
+    const accName = String(acc.serviceName ?? '').trim();
+    if (!accName) return null;
+
+    const accN = norm(accName);
+
+    const exact = servicesSafe.find((s: any) => norm(s?.name) === accN) ?? null;
+    if (exact) return exact;
+
+    const candidates = servicesSafe
+      .filter((s: any) => {
+        const sn = norm(s?.name);
+        return sn && (sn.includes(accN) || accN.includes(sn));
+      })
+      .map((s: any) => ({ s, score: Math.min(norm(s?.name).length, accN.length) }))
+      .sort((a: any, b: any) => b.score - a.score);
+
+    return candidates[0]?.s ?? null;
   };
 
-  const getServiceNameForAccount = (acc: any) => {
+  const getBaseServiceNameForAccount = (acc: any) => {
     const svc = getServiceForAccount(acc);
     return svc?.name ?? acc?.serviceName ?? 'Servicio';
+  };
+
+  const getServiceDisplayNameForAccount = (acc: any) => {
+    const base = getBaseServiceNameForAccount(acc);
+    return buildServiceDisplayName(base, acc?.planName);
   };
 
   const getServiceColorForAccount = (acc: any) => {
@@ -163,7 +202,8 @@ export default function Profiles() {
             const isExpanded = expandedAccount === account.id;
             if (accountProfiles.length === 0) return null;
 
-            const serviceName = getServiceNameForAccount(account);
+            const serviceDisplayName = getServiceDisplayNameForAccount(account);
+            const baseServiceName = getBaseServiceNameForAccount(account);
             const serviceColor = getServiceColorForAccount(account);
             const serviceImage = getServiceImageForAccount(account);
 
@@ -183,20 +223,25 @@ export default function Profiles() {
                           {serviceImage ? (
                             <img
                               src={serviceImage}
-                              alt={serviceName}
+                              alt={serviceDisplayName || baseServiceName}
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 (e.currentTarget as HTMLImageElement).style.display = 'none';
                               }}
                             />
                           ) : (
-                            String(serviceName ?? '').substring(0, 1)
+                            String(serviceDisplayName || baseServiceName ?? '').substring(0, 1)
                           )}
                         </div>
 
                         <div className="min-w-0">
-                          <CardTitle className="text-base text-white truncate">{serviceName}</CardTitle>
+                          <CardTitle className="text-base text-white truncate">
+                            {serviceDisplayName || baseServiceName}
+                          </CardTitle>
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
+                          {!!account?.planName && (
+                            <p className="text-[11px] text-muted-foreground truncate">Plan: {String(account.planName)}</p>
+                          )}
                         </div>
                       </div>
 
