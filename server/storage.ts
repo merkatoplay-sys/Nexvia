@@ -18,7 +18,7 @@ import {
   type Settings,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, inArray, or, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, or } from "drizzle-orm";
 
 /**
  * Drizzle timestamp necesita Date.
@@ -40,6 +40,12 @@ function toDateOrNull(value: unknown): Date | null {
 
 // ✅ normalizador
 const norm = (v: any) => String(v ?? "").trim().toLowerCase();
+
+function addDaysSafe(base: Date, days: number) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+}
 
 export interface IStorage {
   // Services
@@ -82,8 +88,14 @@ export interface IStorage {
   getSettings(userId: string): Promise<Settings | null>;
   updateSettings(userId: string, updates: Partial<Settings>): Promise<Settings>;
 
-  // ✅ Backfill slots (para cuentas existentes sin perfiles)
+  // ✅ Backfill slots
   backfillAccountSlots(userId: string): Promise<{ created: number }>;
+
+  // ✅ Telegram
+  renewAccount30(userId: string, accountId: string): Promise<{ newDate: Date; cost: number }>;
+  cancelAccountArchive(userId: string, accountId: string): Promise<void>;
+  renewProfile30(userId: string, profileId: string): Promise<{ newDate: Date; price: number; accountId: string }>;
+  cancelProfileToAvailable(userId: string, profileId: string): Promise<{ accountId: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -126,58 +138,12 @@ export class DatabaseStorage implements IStorage {
     return newService;
   }
 
-  /**
-   * ✅ CLAVE:
-   * - si un servicio cambia de nombre, actualizamos accounts.serviceName en:
-   *   1) cuentas con serviceId = este servicio
-   *   2) cuentas legacy (serviceId null) que tengan el nombre viejo (normalizado)
-   */
   async updateService(id: string, userId: string, updates: Partial<Service>): Promise<Service> {
-    // 1) leer servicio actual para saber oldName
-    const [current] = await db
-      .select()
-      .from(services)
-      .where(and(eq(services.id, id), eq(services.userId, userId)));
-
-    if (!current) {
-      throw new Error("Servicio no encontrado");
-    }
-
-    // 2) actualizar servicio
     const [updated] = await db
       .update(services)
       .set(updates)
       .where(and(eq(services.id, id), eq(services.userId, userId)))
       .returning();
-
-    if (!updated) {
-      throw new Error("No se pudo actualizar el servicio");
-    }
-
-    // 3) siempre sincroniza serviceName en cuentas que ya usan serviceId
-    await db
-      .update(accounts)
-      .set({ serviceName: updated.name })
-      .where(and(eq(accounts.userId, userId), eq(accounts.serviceId, id)));
-
-    // 4) si cambió el nombre, “repara” legacy: serviceId null + serviceName viejo
-    const nameChanged =
-      typeof (updates as any)?.name === "string" && norm((updates as any).name) !== norm(current.name);
-
-    if (nameChanged) {
-      const oldNorm = norm(current.name);
-
-      await db
-        .update(accounts)
-        .set({ serviceId: id, serviceName: updated.name })
-        .where(
-          and(
-            eq(accounts.userId, userId),
-            sql`${accounts.serviceId} is null`,
-            sql`lower(trim(${accounts.serviceName})) = ${oldNorm}`
-          )
-        );
-    }
 
     return updated;
   }
@@ -190,24 +156,18 @@ export class DatabaseStorage implements IStorage {
 
     if (!service) return;
 
-    const serviceNorm = norm(service.name);
-
-    // ✅ Busca cuentas por serviceId (nuevo) o por serviceName normalizado (legacy)
     const serviceAccounts = await db
       .select()
       .from(accounts)
       .where(
         and(
           eq(accounts.userId, userId),
-          or(
-            eq(accounts.serviceId, service.id),
-            and(sql`${accounts.serviceId} is null`, sql`lower(trim(${accounts.serviceName})) = ${serviceNorm}`)
-          )
+          or(eq(accounts.serviceId, service.id), eq(accounts.serviceName, service.name))
         )
       );
 
     for (const account of serviceAccounts) {
-      await this.deleteAccount(account.id, userId); // archiva
+      await this.deleteAccount(account.id, userId);
     }
 
     await db.delete(services).where(and(eq(services.id, id), eq(services.userId, userId)));
@@ -254,7 +214,7 @@ export class DatabaseStorage implements IStorage {
     return missing;
   }
 
-  // ✅ AHORA: al crear cuenta, crea perfiles disponibles reales
+  // ✅ Crear cuenta + slots reales
   async createAccount(account: InsertAccount): Promise<Account> {
     const payload: any = { ...account };
 
@@ -264,7 +224,6 @@ export class DatabaseStorage implements IStorage {
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
-    // normaliza planName
     if ("planName" in payload) {
       const pn = String(payload.planName ?? "").trim();
       payload.planName = pn ? pn : null;
@@ -275,7 +234,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db.transaction(async (tx) => {
       const [newAccount] = await tx.insert(accounts).values(payload).returning();
 
-      // crear slots reales
       if (totalSlots > 0) {
         await this.ensureSlotsTx(tx as any, newAccount.userId, newAccount.id, totalSlots);
       }
@@ -286,6 +244,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // ✅ UPDATE CUENTA + AJUSTE DE SLOTS (NUEVO)
   async updateAccount(id: string, userId: string, updates: Partial<Account>): Promise<Account> {
     const payload: any = { ...updates };
 
@@ -303,22 +262,87 @@ export class DatabaseStorage implements IStorage {
     if ("soldStartDate" in payload) payload.soldStartDate = toDateOrNull(payload.soldStartDate);
     if ("soldEndDate" in payload) payload.soldEndDate = toDateOrNull(payload.soldEndDate);
 
-    // normaliza planName
     if ("planName" in payload) {
       const pn = String(payload.planName ?? "").trim();
       payload.planName = pn ? pn : null;
     }
 
-    const [updated] = await db
-      .update(accounts)
-      .set(payload)
-      .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
-      .returning();
+    // ✅ normaliza totalProfiles
+    let desiredSlots: number | null = null;
+    if ("totalProfiles" in payload) {
+      const n = Number(payload.totalProfiles);
+      if (!Number.isFinite(n) || n < 0) {
+        delete payload.totalProfiles;
+      } else {
+        desiredSlots = Math.floor(n);
+        payload.totalProfiles = desiredSlots;
+      }
+    }
 
-    return updated;
+    const result = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(accounts)
+        .set(payload)
+        .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+        .returning();
+
+      if (!updated) throw new Error("Cuenta no encontrada");
+
+      // ✅ si cambiaron slots, ajustar perfiles reales
+      if (desiredSlots !== null) {
+        const currentProfiles = await tx
+          .select({ id: profiles.id, status: profiles.status, createdAt: profiles.createdAt })
+          .from(profiles)
+          .where(and(eq(profiles.userId, userId), eq(profiles.accountId, id)));
+
+        const totalCount = currentProfiles.length;
+        const activeCount = currentProfiles.filter((p: any) => p.status === "activo").length;
+
+        // no bajar debajo de activos
+        if (desiredSlots < activeCount) {
+          throw new Error(`No puedes bajar a ${desiredSlots} porque hay ${activeCount} perfiles activos.`);
+        }
+
+        // subir -> crear faltantes
+        if (desiredSlots > totalCount) {
+          await this.ensureSlotsTx(tx as any, userId, id, desiredSlots);
+        }
+
+        // bajar -> eliminar SOLO disponibles sobrantes
+        if (desiredSlots < totalCount) {
+          const extra = totalCount - desiredSlots;
+
+          const avail = await tx
+            .select({ id: profiles.id })
+            .from(profiles)
+            .where(
+              and(
+                eq(profiles.userId, userId),
+                eq(profiles.accountId, id),
+                eq(profiles.status, "disponible" as any)
+              )
+            )
+            .orderBy(desc(profiles.createdAt))
+            .limit(extra);
+
+          if (avail.length < extra) {
+            throw new Error(
+              `No puedes bajar a ${desiredSlots} porque solo hay ${avail.length} disponibles para eliminar (sobran ${extra}).`
+            );
+          }
+
+          const idsToDelete = avail.map((x) => x.id);
+          await tx.delete(profiles).where(and(eq(profiles.userId, userId), inArray(profiles.id, idsToDelete)));
+        }
+      }
+
+      return updated;
+    });
+
+    return result;
   }
 
-  // ✅ Opción 1: ARCHIVAR
+  // ✅ ARCHIVAR
   async deleteAccount(id: string, userId: string): Promise<void> {
     await db
       .update(accounts)
@@ -371,12 +395,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Move Profiles ✅
-  async moveProfiles(
-    userId: string,
-    fromAccountId: string,
-    toAccountId: string,
-    profileIds: string[]
-  ): Promise<{ moved: number }> {
+  async moveProfiles(userId: string, fromAccountId: string, toAccountId: string, profileIds: string[]) {
     if (!profileIds?.length) return { moved: 0 };
 
     const [fromAccount] = await db
@@ -392,18 +411,14 @@ export class DatabaseStorage implements IStorage {
     if (!fromAccount) throw new Error("Cuenta origen no encontrada");
     if (!toAccount) throw new Error("Cuenta destino no encontrada");
 
-    // ✅ Cambiado: compara por serviceId si ambos tienen, sino por serviceName (legacy)
     const sameService =
       (fromAccount.serviceId && toAccount.serviceId && fromAccount.serviceId === toAccount.serviceId) ||
       (!fromAccount.serviceId &&
         !toAccount.serviceId &&
         norm(fromAccount.serviceName) === norm(toAccount.serviceName)) ||
-      // caso mixto (uno legacy, otro nuevo): comparamos por nombre para permitir migraciones
       norm(fromAccount.serviceName) === norm(toAccount.serviceName);
 
-    if (!sameService) {
-      throw new Error("No puedes mover perfiles entre servicios distintos");
-    }
+    if (!sameService) throw new Error("No puedes mover perfiles entre servicios distintos");
 
     const profilesToMove = await db
       .select()
@@ -423,9 +438,7 @@ export class DatabaseStorage implements IStorage {
     const destAvailable = await db
       .select()
       .from(profiles)
-      .where(
-        and(eq(profiles.userId, userId), eq(profiles.accountId, toAccountId), eq(profiles.status, "disponible"))
-      )
+      .where(and(eq(profiles.userId, userId), eq(profiles.accountId, toAccountId), eq(profiles.status, "disponible")))
       .orderBy(desc(profiles.createdAt));
 
     if (destAvailable.length < profilesToMove.length) {
@@ -436,8 +449,8 @@ export class DatabaseStorage implements IStorage {
 
     await db.transaction(async (tx) => {
       for (let i = 0; i < profilesToMove.length; i++) {
-        const src = profilesToMove[i];
-        const dstSlot = destAvailable[i];
+        const src: any = profilesToMove[i];
+        const dstSlot: any = destAvailable[i];
 
         await tx
           .update(profiles)
@@ -498,11 +511,7 @@ export class DatabaseStorage implements IStorage {
   async voidExpense(expenseId: string, userId: string, reason?: string): Promise<void> {
     await db
       .update(expenses)
-      .set({
-        isVoided: true,
-        voidedAt: new Date(),
-        voidReason: reason ?? null,
-      })
+      .set({ isVoided: true, voidedAt: new Date(), voidReason: reason ?? null })
       .where(and(eq(expenses.id, expenseId), eq(expenses.userId, userId)));
   }
 
@@ -544,7 +553,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // ✅ Backfill para cuentas ya creadas que no tienen slots reales
+  // ✅ Backfill slots
   async backfillAccountSlots(userId: string): Promise<{ created: number }> {
     const userAccounts = await db
       .select()
@@ -562,6 +571,139 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { created };
+  }
+
+  // =========================
+  // ✅ Telegram Actions
+  // =========================
+  async renewAccount30(userId: string, accountId: string) {
+    const [acc] = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
+
+    if (!acc) throw new Error("Cuenta no encontrada");
+    if (acc.isArchived) throw new Error("La cuenta está archivada");
+
+    const today = new Date();
+    const currentExp = toDateOrNull(acc.expirationDate as any) ?? today;
+    const base = currentExp.getTime() > today.getTime() ? currentExp : today;
+
+    const newDate = addDaysSafe(base, 30);
+
+    await db
+      .update(accounts)
+      .set({ expirationDate: newDate, status: "activa" as any })
+      .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
+
+    const cost = Number(acc.cost || 0);
+    if (cost > 0) {
+      const label = acc.planName ? `${acc.serviceName} - ${acc.planName}` : acc.serviceName;
+      await this.createExpense({
+        userId,
+        description: `Renovación cuenta ${label} (+30 días)`,
+        amount: cost,
+        type: "gasto",
+        accountId: acc.id,
+        profileId: null,
+        date: new Date(),
+        note: "Renovación desde Telegram",
+        reference: "RENOVACION_CUENTA_TELEGRAM",
+      } as any);
+    }
+
+    return { newDate, cost };
+  }
+
+  async cancelAccountArchive(userId: string, accountId: string) {
+    const [acc] = await db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
+
+    if (!acc) throw new Error("Cuenta no encontrada");
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(accounts)
+        .set({ isArchived: true, archivedAt: new Date() })
+        .where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)));
+
+      await tx
+        .update(profiles)
+        .set({
+          name: "Disponible",
+          phone: null,
+          pin: null,
+          clientId: null,
+          price: null,
+          startDate: null,
+          endDate: null,
+          status: "disponible" as any,
+        })
+        .where(and(eq(profiles.accountId, accountId), eq(profiles.userId, userId)));
+    });
+  }
+
+  async renewProfile30(userId: string, profileId: string) {
+    const [p] = await db
+      .select()
+      .from(profiles)
+      .where(and(eq(profiles.id, profileId), eq(profiles.userId, userId)));
+
+    if (!p) throw new Error("Perfil no encontrado");
+
+    const today = new Date();
+    const cur = toDateOrNull(p.endDate as any) ?? today;
+    const base = cur.getTime() > today.getTime() ? cur : today;
+    const newDate = addDaysSafe(base, 30);
+
+    await db
+      .update(profiles)
+      .set({ endDate: newDate, status: "activo" as any })
+      .where(and(eq(profiles.id, profileId), eq(profiles.userId, userId)));
+
+    const price = Number(p.price || 0);
+    if (price > 0) {
+      await this.createExpense({
+        userId,
+        description: `Renovación perfil ${p.name} (+30 días)`,
+        amount: price,
+        type: "ganancia",
+        profileId: p.id,
+        accountId: p.accountId,
+        date: new Date(),
+        note: "Renovación desde Telegram",
+        reference: "RENOVACION_PERFIL_TELEGRAM",
+      } as any);
+    }
+
+    return { newDate, price, accountId: p.accountId };
+  }
+
+  async cancelProfileToAvailable(userId: string, profileId: string) {
+    const [p] = await db
+      .select()
+      .from(profiles)
+      .where(and(eq(profiles.id, profileId), eq(profiles.userId, userId)));
+
+    if (!p) throw new Error("Perfil no encontrado");
+
+    await db
+      .update(profiles)
+      .set({
+        status: "disponible" as any,
+        clientId: null,
+        name: "Disponible",
+        phone: null,
+        pin: null,
+        price: null,
+        startDate: null,
+        endDate: null,
+      })
+      .where(and(eq(profiles.id, profileId), eq(profiles.userId, userId)));
+
+    return { accountId: p.accountId };
   }
 }
 

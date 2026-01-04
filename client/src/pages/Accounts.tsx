@@ -20,6 +20,7 @@ type ProfileLike = {
   clientId?: string | null;
   phone?: string | null;
   price?: number | null;
+  createdAt?: any; // ✅ por si viene del backend
   __placeholder?: boolean;
 };
 
@@ -47,7 +48,7 @@ const findServiceByName = (services: any[], name: any) => {
   const exact = services.find((s: any) => norm(s?.name) === n);
   if (exact) return exact;
 
-  // 2) match parcial (ej: "netflix" dentro de "netflix premium 4k" o viceversa)
+  // 2) match parcial
   const partial = services.find((s: any) => {
     const sn = norm(s?.name);
     if (!sn) return false;
@@ -126,7 +127,8 @@ export default function Accounts() {
     expirationDate: '', // dd/MM/yyyy
     cost: 0,
     isRenewable: true,
-    planName: '', // ✅ nuevo
+    planName: '', // ✅
+    totalProfiles: 5, // ✅ NUEVO
   });
 
   // Mover perfiles
@@ -139,11 +141,11 @@ export default function Accounts() {
   const getServiceForAccount = (acc: any) => {
     if (!acc) return null;
 
-    // 1) por ID (ideal)
+    // 1) por ID
     const byId = acc.serviceId ? servicesSafe.find((s: any) => s.id === acc.serviceId) : null;
     if (byId) return byId;
 
-    // 2) por nombre (case-insensitive + tolerant)
+    // 2) por nombre
     if (acc.serviceName) return findServiceByName(servicesSafe, acc.serviceName);
 
     return null;
@@ -166,7 +168,6 @@ export default function Accounts() {
     setNewAccount((prev) => {
       if (prev.serviceId) return prev;
 
-      // ✅ tolerante
       const netflix = servicesSafe.find((s: any) => norm(s?.name) === 'netflix');
       const first = netflix ?? servicesSafe[0];
 
@@ -190,7 +191,6 @@ export default function Accounts() {
         serviceBaseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         displayName.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // ✅ filtro por serviceId, con fallback por nombre para cuentas viejas (más robusto)
       const matchesService =
         filterService === 'all' ||
         (acc.serviceId && acc.serviceId === filterService) ||
@@ -212,7 +212,7 @@ export default function Accounts() {
     if (!serviceId || !serviceName) return;
     if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
 
-    // ✅ vencimiento dd/MM/yyyy -> ISO (si está vacío: +30 días)
+    // dd/MM/yyyy -> ISO
     let expISO: string;
     const expText = newAccount.expirationDate?.trim();
     if (expText) {
@@ -227,7 +227,7 @@ export default function Accounts() {
     const success = await addAccount({
       serviceId,
       serviceName,
-      planName: planName ? planName : null, // ✅ nuevo
+      planName: planName ? planName : null,
       email: newAccount.email || '',
       password: newAccount.password || '',
       totalProfiles: Number(newAccount.totalProfiles || 5),
@@ -272,7 +272,7 @@ export default function Accounts() {
     setSelectedMoveProfileIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  // ✅ candidates por serviceId si existe, fallback por serviceName (case-insensitive)
+  // ✅ candidates por serviceId si existe, fallback por serviceName
   const destinationCandidates = (accountsSafe ?? [])
     .filter((a: any) => {
       if (!moveFromAccount) return false;
@@ -280,7 +280,6 @@ export default function Accounts() {
 
       if (moveFromAccount.serviceId && a.serviceId) return a.serviceId === moveFromAccount.serviceId;
 
-      // fallback viejo (blindado)
       return norm(a.serviceName) === norm(moveFromAccount.serviceName);
     })
     .map((a: any) => ({
@@ -288,12 +287,12 @@ export default function Accounts() {
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
 
-  // ✅ mandar a ventas con serviceId (y serviceName fallback)
+  // ✅ mandar a ventas con serviceId
   const goSellFromSlot = (serviceId: string, serviceName: string, accountId: string, profile?: ProfileLike) => {
     const params = new URLSearchParams();
     params.set('mode', 'perfil');
-    params.set('serviceId', serviceId); // ✅ nuevo
-    params.set('service', serviceName); // ✅ fallback
+    params.set('serviceId', serviceId);
+    params.set('service', serviceName);
     params.set('accountId', accountId);
 
     if (profile && !profile.__placeholder && profile.status === 'disponible') {
@@ -312,6 +311,13 @@ export default function Accounts() {
   const newSvc = getServiceForNewAccount();
   const maxProfilesLabel =
     getMaxProfilesByService?.((newSvc?.id || newSvc?.name || newAccount.serviceName || 'Netflix') as any) ?? 5;
+
+  // ✅ max para EDIT (depende del servicio de la cuenta)
+  const editSvc = getServiceForAccount(editingAccount);
+  const editMaxProfiles =
+    getMaxProfilesByService?.((editSvc?.id || editSvc?.name || editingAccount?.serviceId || editingAccount?.serviceName || 'Netflix') as any) ?? 5;
+
+  const editActiveProfilesCount = (editingAccount?.profiles ?? []).filter((p: any) => p.status === 'activo').length;
 
   return (
     <div className="space-y-8">
@@ -380,7 +386,6 @@ export default function Accounts() {
                 </div>
               </div>
 
-              {/* ✅ NUEVO: Plan/Nombre */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Plan / Nombre (opcional)</label>
                 <Input
@@ -392,7 +397,10 @@ export default function Accounts() {
                   name="planName"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Se mostrará como: <span className="text-white">{buildAccountDisplayName(newAccount.serviceName || 'Servicio', newAccount.planName)}</span>
+                  Se mostrará como:{' '}
+                  <span className="text-white">
+                    {buildAccountDisplayName(newAccount.serviceName || 'Servicio', newAccount.planName)}
+                  </span>
                 </p>
               </div>
 
@@ -567,7 +575,15 @@ export default function Accounts() {
 
             const serviceImage = getServiceImage(svc);
 
-            const realProfiles: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
+            const realProfilesRaw: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
+
+            // ✅ orden estable si existe createdAt
+            const realProfiles: ProfileLike[] = [...realProfilesRaw].sort((a: any, b: any) => {
+              const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return ta - tb;
+            });
+
             const totalSlots = Number(account.totalProfiles || 0);
 
             const displayProfiles: ProfileLike[] = Array.from({ length: totalSlots }, (_, idx) => {
@@ -614,7 +630,6 @@ export default function Accounts() {
                         </div>
 
                         <div className="min-w-0">
-                          {/* ✅ ahora muestra Servicio + Plan */}
                           <CardTitle className="text-lg text-white">{displayTitle}</CardTitle>
                           <p className="text-xs text-muted-foreground truncate">{account.email}</p>
 
@@ -683,12 +698,11 @@ export default function Accounts() {
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
-                                expirationDate: account.expirationDate
-                                  ? format(new Date(account.expirationDate), 'dd/MM/yyyy')
-                                  : '',
+                                expirationDate: account.expirationDate ? format(new Date(account.expirationDate), 'dd/MM/yyyy') : '',
                                 cost: Number(account.cost || 0),
                                 isRenewable: !!account.isRenewable,
-                                planName: String(account.planName ?? ''), // ✅ nuevo
+                                planName: String(account.planName ?? ''),
+                                totalProfiles: Number(account.totalProfiles || 0), // ✅ NUEVO
                               });
                               setEditAccountOpen(true);
                             }}
@@ -699,9 +713,7 @@ export default function Accounts() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() =>
-                              setDeleteConfirm({ open: true, id: account.id, name: displayTitle, email: account.email })
-                            }
+                            onClick={() => setDeleteConfirm({ open: true, id: account.id, name: displayTitle, email: account.email })}
                             className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
                             title="Eliminar"
                           >
@@ -716,15 +728,11 @@ export default function Accounts() {
                     <div className="grid grid-cols-2 gap-2 mb-4">
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Inicio</span>
-                        <span className="text-xs font-medium text-white">
-                          {format(new Date(account.startDate), 'dd MMM')}
-                        </span>
+                        <span className="text-xs font-medium text-white">{format(new Date(account.startDate), 'dd MMM')}</span>
                       </div>
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Vence</span>
-                        <span className="text-xs font-medium text-white">
-                          {format(new Date(account.expirationDate), 'dd MMM')}
-                        </span>
+                        <span className="text-xs font-medium text-white">{format(new Date(account.expirationDate), 'dd MMM')}</span>
                       </div>
                     </div>
 
@@ -761,28 +769,16 @@ export default function Accounts() {
                           title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <User
-                              className={`h-3 w-3 shrink-0 ${
-                                profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
-                              }`}
-                            />
-                            <span
-                              className={`truncate ${
-                                profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
-                              }`}
-                            >
+                            <User className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
+                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
                               {profile.name}
                             </span>
                           </div>
 
                           {profile.status === 'activo' ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
-                              Activo
-                            </Badge>
+                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">Activo</Badge>
                           ) : profile.status === 'vencido' ? (
-                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
-                              Vencido
-                            </Badge>
+                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">Vencido</Badge>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">Disponible</span>
                           )}
@@ -800,10 +796,7 @@ export default function Accounts() {
       {/* Editar perfil */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
-          <DialogContent
-            className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
-            aria-describedby={undefined}
-          >
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>Editar Perfil: {editingProfile.profile.name}</DialogTitle>
             </DialogHeader>
@@ -811,20 +804,12 @@ export default function Accounts() {
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Nombre</label>
-                <Input
-                  className="glass-input"
-                  value={editData.name}
-                  onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                />
+                <Input className="glass-input" value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Teléfono</label>
-                <Input
-                  className="glass-input"
-                  value={editData.phone}
-                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                />
+                <Input className="glass-input" value={editData.phone} onChange={(e) => setEditData({ ...editData, phone: e.target.value })} />
               </div>
 
               <div className="space-y-2">
@@ -881,11 +866,7 @@ export default function Accounts() {
             </div>
 
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setEditingProfile(null)}
-                className="border-white/10 hover:bg-white/5 text-white"
-              >
+              <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">
                 Cancelar
               </Button>
               <Button
@@ -910,10 +891,7 @@ export default function Accounts() {
 
       {/* Editar cuenta maestra */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
-        <DialogContent
-          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
-          aria-describedby={undefined}
-        >
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Editar Cuenta</DialogTitle>
           </DialogHeader>
@@ -922,7 +900,25 @@ export default function Accounts() {
             <p className="text-sm text-muted-foreground">No hay cuenta seleccionada.</p>
           ) : (
             <div className="grid gap-4 py-4">
-              {/* ✅ NUEVO: Plan/Nombre */}
+              {/* ✅ NUEVO: Perfiles */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">
+                  Número de perfiles (Máx: {editMaxProfiles})
+                </label>
+                <Input
+                  type="number"
+                  className="glass-input"
+                  value={editAccountData.totalProfiles}
+                  min={0}
+                  max={editMaxProfiles}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, totalProfiles: parseInt(e.target.value || '0') })}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Activos actuales: <span className="text-white">{editActiveProfilesCount}</span>. No puedes bajar por debajo de los activos.
+                </p>
+              </div>
+
+              {/* Plan */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Plan / Nombre</label>
                 <Input
@@ -933,9 +929,7 @@ export default function Accounts() {
                   autoComplete="off"
                   name="planNameEdit"
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Nota: El servicio no se puede cambiar, solo el nombre/plan.
-                </p>
+                <p className="text-[11px] text-muted-foreground">Nota: El servicio no se puede cambiar, solo el nombre/plan.</p>
               </div>
 
               <div className="space-y-2">
@@ -982,18 +976,13 @@ export default function Accounts() {
                     className="glass-input"
                     placeholder="31/01/2026"
                     value={editAccountData.expirationDate}
-                    onChange={(e) =>
-                      setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })
-                    }
+                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select
-                    value={editAccountData.isRenewable ? 'si' : 'no'}
-                    onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}
-                  >
+                  <Select value={editAccountData.isRenewable ? 'si' : 'no'} onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}>
                     <SelectTrigger className="glass-input">
                       <SelectValue />
                     </SelectTrigger>
@@ -1013,19 +1002,13 @@ export default function Accounts() {
                   value={editAccountData.cost}
                   onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Nota: cambiar el costo aquí NO cambia el gasto histórico (eso queda en transacciones).
-                </p>
+                <p className="text-[11px] text-muted-foreground">Nota: cambiar el costo aquí NO cambia el gasto histórico.</p>
               </div>
             </div>
           )}
 
           <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setEditAccountOpen(false)}
-              className="border-white/10 hover:bg-white/5 text-white"
-            >
+            <Button variant="outline" onClick={() => setEditAccountOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
               Cancelar
             </Button>
             <Button
@@ -1033,6 +1016,9 @@ export default function Accounts() {
               disabled={!editingAccount}
               onClick={async () => {
                 if (!editingAccount) return;
+
+                // guardrail UI: no bajar debajo de activos
+                if (Number(editAccountData.totalProfiles || 0) < editActiveProfilesCount) return;
 
                 let expISO: string | undefined = undefined;
                 const expText = editAccountData.expirationDate?.trim();
@@ -1048,7 +1034,8 @@ export default function Accounts() {
                 const ok = await updateAccount(
                   editingAccount.id,
                   {
-                    planName: plan ? plan : null, // ✅ nuevo
+                    totalProfiles: Math.min(Number(editAccountData.totalProfiles || 0), editMaxProfiles), // ✅ NUEVO
+                    planName: plan ? plan : null,
                     email: editAccountData.email,
                     password: editAccountData.password,
                     expirationDate: expISO,
@@ -1068,14 +1055,10 @@ export default function Accounts() {
 
       {/* Mover perfiles */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent
-          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
-          aria-describedby={undefined}
-        >
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>
-              Mover perfiles{' '}
-              {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
+              Mover perfiles {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -1148,10 +1131,7 @@ export default function Accounts() {
 
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {activeProfilesOfFrom.map((p: any) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center justify-between p-2 rounded-md bg-white/5 border border-white/10"
-                    >
+                    <div key={p.id} className="flex items-center justify-between p-2 rounded-md bg-white/5 border border-white/10">
                       <div>
                         <p className="text-sm text-white font-medium">{p.name}</p>
                         <p className="text-xs text-muted-foreground">{p.phone || 'Sin teléfono'}</p>
@@ -1178,11 +1158,7 @@ export default function Accounts() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setMoveOpen(false)}
-              className="border-white/10 hover:bg-white/5 text-white"
-            >
+            <Button variant="outline" onClick={() => setMoveOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
               Cancelar
             </Button>
 
