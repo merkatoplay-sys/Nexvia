@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Search, User, MonitorPlay, Trash2, Pencil, ArrowRightLeft, Eye, EyeOff } from 'lucide-react';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { format, differenceInDays, parse, isValid } from 'date-fns';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 type ProfileLike = {
   id: string;
@@ -20,6 +21,10 @@ type ProfileLike = {
   clientId?: string | null;
   phone?: string | null;
   price?: number | null;
+
+  // ✅ NUEVO: vencimiento del perfil
+  endDate?: string | null;
+
   createdAt?: any; // ✅ por si viene del backend
   __placeholder?: boolean;
 };
@@ -78,7 +83,7 @@ export default function Accounts() {
     getServiceColor,
   } = useStreaming();
 
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   const accountsSafe = accounts ?? [];
   const servicesSafe = services ?? [];
@@ -94,7 +99,16 @@ export default function Accounts() {
   const [showPasswordByAccount, setShowPasswordByAccount] = useState<Record<string, boolean>>({});
 
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: ProfileLike } | null>(null);
-  const [editData, setEditData] = useState({ name: '', pin: '', clientId: '', phone: '', price: 0 });
+
+  // ✅ editData ahora incluye endDate (dd/MM/yyyy)
+  const [editData, setEditData] = useState({
+    name: '',
+    pin: '',
+    clientId: '',
+    phone: '',
+    price: 0,
+    endDate: '',
+  });
 
   // ver/ocultar PIN dentro del modal de editar perfil
   const [showEditProfilePin, setShowEditProfilePin] = useState(false);
@@ -136,6 +150,10 @@ export default function Accounts() {
   const [moveFromAccount, setMoveFromAccount] = useState<any>(null);
   const [moveToAccountId, setMoveToAccountId] = useState<string>('');
   const [selectedMoveProfileIds, setSelectedMoveProfileIds] = useState<string[]>([]);
+
+  // ✅ refs para deep-link (Dashboard -> Accounts)
+  const accountRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const didFocusRef = useRef<string>('');
 
   // ✅ resolver servicio por account (por ID, fallback por nombre robusto)
   const getServiceForAccount = (acc: any) => {
@@ -179,6 +197,49 @@ export default function Accounts() {
     });
   }, [isAddOpen, servicesSafe]);
 
+  // ✅ Deep link: /accounts?accountId=...&profileId=...
+  useEffect(() => {
+    if (!accountsSafe.length) return;
+
+    const search = window.location.search || '';
+    const focusKey = `${location}|${search}`;
+    if (didFocusRef.current === focusKey) return;
+    didFocusRef.current = focusKey;
+
+    const params = new URLSearchParams(search);
+    const accountId = params.get('accountId') || '';
+    const profileId = params.get('profileId') || '';
+
+    if (!accountId) return;
+
+    const acc = accountsSafe.find((a: any) => a.id === accountId);
+    if (!acc) return;
+
+    // scroll a la cuenta
+    const el = accountRefs.current[accountId];
+    if (el?.scrollIntoView) {
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+
+    // abrir perfil
+    if (profileId) {
+      const p = (acc.profiles ?? []).find((x: any) => x.id === profileId);
+      if (p && p.status === 'activo') {
+        setShowEditProfilePin(false);
+        setEditingProfile({ accountId: acc.id, profile: p });
+
+        setEditData({
+          name: p.name ?? '',
+          pin: p.pin ?? '',
+          clientId: p.clientId ?? '',
+          phone: p.phone ?? '',
+          price: p.price ?? 0,
+          endDate: p.endDate ? format(new Date(p.endDate), 'dd/MM/yyyy') : '',
+        });
+      }
+    }
+  }, [accountsSafe, location]);
+
   const filteredAccounts = useMemo(() => {
     return accountsSafe.filter((acc: any) => {
       const service = getServiceForAccount(acc);
@@ -217,7 +278,10 @@ export default function Accounts() {
     const expText = newAccount.expirationDate?.trim();
     if (expText) {
       const parsed = parse(expText, 'dd/MM/yyyy', new Date());
-      if (!isValid(parsed)) return;
+      if (!isValid(parsed)) {
+        toast.error('Fecha inválida. Usa formato dd/MM/aaaa');
+        return;
+      }
       parsed.setHours(0, 0, 0, 0);
       expISO = parsed.toISOString();
     } else {
@@ -305,7 +369,7 @@ export default function Accounts() {
   // helper imagen del servicio
   const getServiceImage = (svc: any): string => {
     if (!svc) return '';
-    return svc.imageUrl || svc.iconUrl || svc.image || svc.logoUrl || '';
+    return svc.imageUrl || (svc as any).iconUrl || (svc as any).image || (svc as any).logoUrl || '';
   };
 
   const newSvc = getServiceForNewAccount();
@@ -315,7 +379,9 @@ export default function Accounts() {
   // ✅ max para EDIT (depende del servicio de la cuenta)
   const editSvc = getServiceForAccount(editingAccount);
   const editMaxProfiles =
-    getMaxProfilesByService?.((editSvc?.id || editSvc?.name || editingAccount?.serviceId || editingAccount?.serviceName || 'Netflix') as any) ?? 5;
+    getMaxProfilesByService?.(
+      (editSvc?.id || editSvc?.name || editingAccount?.serviceId || editingAccount?.serviceName || 'Netflix') as any
+    ) ?? 5;
 
   const editActiveProfilesCount = (editingAccount?.profiles ?? []).filter((p: any) => p.status === 'activo').length;
 
@@ -554,9 +620,7 @@ export default function Accounts() {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Search className="h-16 w-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">Sin resultados</h3>
-            <p className="text-muted-foreground text-center">
-              No se encontraron cuentas que coincidan con tu búsqueda.
-            </p>
+            <p className="text-muted-foreground text-center">No se encontraron cuentas que coincidan con tu búsqueda.</p>
           </CardContent>
         </Card>
       ) : (
@@ -603,6 +667,9 @@ export default function Accounts() {
             return (
               <motion.div
                 key={account.id}
+                ref={(el) => {
+                  accountRefs.current[account.id] = el;
+                }}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.2 }}
@@ -698,11 +765,13 @@ export default function Accounts() {
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
-                                expirationDate: account.expirationDate ? format(new Date(account.expirationDate), 'dd/MM/yyyy') : '',
+                                expirationDate: account.expirationDate
+                                  ? format(new Date(account.expirationDate), 'dd/MM/yyyy')
+                                  : '',
                                 cost: Number(account.cost || 0),
                                 isRenewable: !!account.isRenewable,
                                 planName: String(account.planName ?? ''),
-                                totalProfiles: Number(account.totalProfiles || 0), // ✅ NUEVO
+                                totalProfiles: Number(account.totalProfiles || 0),
                               });
                               setEditAccountOpen(true);
                             }}
@@ -713,7 +782,9 @@ export default function Accounts() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setDeleteConfirm({ open: true, id: account.id, name: displayTitle, email: account.email })}
+                            onClick={() =>
+                              setDeleteConfirm({ open: true, id: account.id, name: displayTitle, email: account.email })
+                            }
                             className="w-8 h-8 p-0 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400"
                             title="Eliminar"
                           >
@@ -728,11 +799,15 @@ export default function Accounts() {
                     <div className="grid grid-cols-2 gap-2 mb-4">
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Inicio</span>
-                        <span className="text-xs font-medium text-white">{format(new Date(account.startDate), 'dd MMM')}</span>
+                        <span className="text-xs font-medium text-white">
+                          {format(new Date(account.startDate), 'dd MMM')}
+                        </span>
                       </div>
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Vence</span>
-                        <span className="text-xs font-medium text-white">{format(new Date(account.expirationDate), 'dd MMM')}</span>
+                        <span className="text-xs font-medium text-white">
+                          {format(new Date(account.expirationDate), 'dd MMM')}
+                        </span>
                       </div>
                     </div>
 
@@ -757,6 +832,7 @@ export default function Accounts() {
                                 clientId: profile.clientId ?? '',
                                 phone: profile.phone ?? '',
                                 price: profile.price ?? 0,
+                                endDate: profile.endDate ? format(new Date(profile.endDate), 'dd/MM/yyyy') : '',
                               });
                               return;
                             }
@@ -769,16 +845,28 @@ export default function Accounts() {
                           title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <User className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`} />
-                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                            <User
+                              className={`h-3 w-3 shrink-0 ${
+                                profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
+                              }`}
+                            />
+                            <span
+                              className={`truncate ${
+                                profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
+                              }`}
+                            >
                               {profile.name}
                             </span>
                           </div>
 
                           {profile.status === 'activo' ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">Activo</Badge>
+                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
+                              Activo
+                            </Badge>
                           ) : profile.status === 'vencido' ? (
-                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">Vencido</Badge>
+                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
+                              Vencido
+                            </Badge>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">Disponible</span>
                           )}
@@ -796,7 +884,10 @@ export default function Accounts() {
       {/* Editar perfil */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
-          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+          <DialogContent
+            className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
+            aria-describedby={undefined}
+          >
             <DialogHeader>
               <DialogTitle>Editar Perfil: {editingProfile.profile.name}</DialogTitle>
             </DialogHeader>
@@ -804,12 +895,20 @@ export default function Accounts() {
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Nombre</label>
-                <Input className="glass-input" value={editData.name} onChange={(e) => setEditData({ ...editData, name: e.target.value })} />
+                <Input
+                  className="glass-input"
+                  value={editData.name}
+                  onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Teléfono</label>
-                <Input className="glass-input" value={editData.phone} onChange={(e) => setEditData({ ...editData, phone: e.target.value })} />
+                <Input
+                  className="glass-input"
+                  value={editData.phone}
+                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
@@ -832,6 +931,23 @@ export default function Accounts() {
                     {showEditProfilePin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
+              </div>
+
+              {/* ✅ NUEVO: vencimiento del perfil */}
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={10}
+                  className="glass-input"
+                  placeholder="31/01/2026"
+                  value={editData.endDate}
+                  onChange={(e) => setEditData({ ...editData, endDate: formatDDMMYYYY(e.target.value) })}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Si lo dejas vacío, se borra el vencimiento del perfil.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -866,18 +982,37 @@ export default function Accounts() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditingProfile(null)} className="border-white/10 hover:bg-white/5 text-white">
+              <Button
+                variant="outline"
+                onClick={() => setEditingProfile(null)}
+                className="border-white/10 hover:bg-white/5 text-white"
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={() => {
+                  // ✅ dd/MM/yyyy -> ISO o null
+                  let endISO: string | null = null;
+                  const txt = (editData.endDate || '').trim();
+                  if (txt) {
+                    const parsed = parse(txt, 'dd/MM/yyyy', new Date());
+                    if (!isValid(parsed)) {
+                      toast.error('Fecha inválida. Usa formato dd/MM/aaaa');
+                      return;
+                    }
+                    parsed.setHours(0, 0, 0, 0);
+                    endISO = parsed.toISOString();
+                  }
+
                   updateProfile(editingProfile.accountId, editingProfile.profile.id, {
                     name: editData.name,
                     pin: editData.pin?.trim() ? editData.pin.trim() : null,
                     clientId: editData.clientId?.trim() ? editData.clientId.trim() : null,
                     phone: editData.phone?.trim() ? editData.phone.trim() : null,
                     price: editData.price || undefined,
+                    endDate: endISO, // ✅ NUEVO
                   } as any);
+
                   setEditingProfile(null);
                 }}
                 className="bg-primary text-white"
@@ -889,9 +1024,12 @@ export default function Accounts() {
         </Dialog>
       )}
 
-      {/* Editar cuenta maestra */}
+      {/* Editar cuenta maestra (tu código igual, sin cambios relevantes) */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent
+          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>Editar Cuenta</DialogTitle>
           </DialogHeader>
@@ -900,25 +1038,24 @@ export default function Accounts() {
             <p className="text-sm text-muted-foreground">No hay cuenta seleccionada.</p>
           ) : (
             <div className="grid gap-4 py-4">
-              {/* ✅ NUEVO: Perfiles */}
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">
-                  Número de perfiles (Máx: {editMaxProfiles})
-                </label>
+                <label className="text-xs text-muted-foreground">Número de perfiles (Máx: {editMaxProfiles})</label>
                 <Input
                   type="number"
                   className="glass-input"
                   value={editAccountData.totalProfiles}
                   min={0}
                   max={editMaxProfiles}
-                  onChange={(e) => setEditAccountData({ ...editAccountData, totalProfiles: parseInt(e.target.value || '0') })}
+                  onChange={(e) =>
+                    setEditAccountData({ ...editAccountData, totalProfiles: parseInt(e.target.value || '0') })
+                  }
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Activos actuales: <span className="text-white">{editActiveProfilesCount}</span>. No puedes bajar por debajo de los activos.
+                  Activos actuales: <span className="text-white">{editActiveProfilesCount}</span>. No puedes bajar por
+                  debajo de los activos.
                 </p>
               </div>
 
-              {/* Plan */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Plan / Nombre</label>
                 <Input
@@ -976,13 +1113,18 @@ export default function Accounts() {
                     className="glass-input"
                     placeholder="31/01/2026"
                     value={editAccountData.expirationDate}
-                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })}
+                    onChange={(e) =>
+                      setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })
+                    }
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select value={editAccountData.isRenewable ? 'si' : 'no'} onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}>
+                  <Select
+                    value={editAccountData.isRenewable ? 'si' : 'no'}
+                    onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue />
                     </SelectTrigger>
@@ -1008,7 +1150,11 @@ export default function Accounts() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditAccountOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+            <Button
+              variant="outline"
+              onClick={() => setEditAccountOpen(false)}
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
               Cancelar
             </Button>
             <Button
@@ -1017,14 +1163,16 @@ export default function Accounts() {
               onClick={async () => {
                 if (!editingAccount) return;
 
-                // guardrail UI: no bajar debajo de activos
                 if (Number(editAccountData.totalProfiles || 0) < editActiveProfilesCount) return;
 
                 let expISO: string | undefined = undefined;
                 const expText = editAccountData.expirationDate?.trim();
                 if (expText) {
                   const parsed = parse(expText, 'dd/MM/yyyy', new Date());
-                  if (!isValid(parsed)) return;
+                  if (!isValid(parsed)) {
+                    toast.error('Fecha inválida. Usa formato dd/MM/aaaa');
+                    return;
+                  }
                   parsed.setHours(0, 0, 0, 0);
                   expISO = parsed.toISOString();
                 }
@@ -1034,7 +1182,7 @@ export default function Accounts() {
                 const ok = await updateAccount(
                   editingAccount.id,
                   {
-                    totalProfiles: Math.min(Number(editAccountData.totalProfiles || 0), editMaxProfiles), // ✅ NUEVO
+                    totalProfiles: Math.min(Number(editAccountData.totalProfiles || 0), editMaxProfiles),
                     planName: plan ? plan : null,
                     email: editAccountData.email,
                     password: editAccountData.password,
@@ -1053,12 +1201,16 @@ export default function Accounts() {
         </DialogContent>
       </Dialog>
 
-      {/* Mover perfiles */}
+      {/* Mover perfiles (igual que tu código) */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
+        <DialogContent
+          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
+          aria-describedby={undefined}
+        >
           <DialogHeader>
             <DialogTitle>
-              Mover perfiles {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
+              Mover perfiles{' '}
+              {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -1158,7 +1310,11 @@ export default function Accounts() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setMoveOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+            <Button
+              variant="outline"
+              onClick={() => setMoveOpen(false)}
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
               Cancelar
             </Button>
 
