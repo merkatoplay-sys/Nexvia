@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, RotateCw, RotateCcw, AlertCircle } from 'lucide-react';
+import { RotateCw, RotateCcw, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -14,7 +14,8 @@ import { toast } from 'sonner';
 type RenovationType = 'account' | 'profile' | 'refund' | null;
 
 export default function Renovaciones() {
-  const { accounts, renewAccountMaster, renewProfileSale, processRefund, recordAdjustment } = useStreaming();
+  const { accounts, renewAccountMaster, renewProfileSale, processRefund } = useStreaming();
+
   const [renovationType, setRenovationType] = useState<RenovationType>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -71,48 +72,37 @@ export default function Renovaciones() {
     setRenovationType(null);
   };
 
-  const selectedAccountData = accounts.find(a => a.id === selectedAccount);
-  const selectedProfileData = selectedAccountData?.profiles.find(p => p.id === selectedProfile);
+  const selectedAccountData = accounts.find((a) => a.id === selectedAccount);
+  const selectedProfileData = selectedAccountData?.profiles?.find((p) => p.id === selectedProfile);
 
   const container = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
-    }
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } },
   };
 
-  const item = {
-    hidden: { y: 20, opacity: 0 },
-    show: { y: 0, opacity: 1 }
-  };
+  const item = { hidden: { y: 20, opacity: 0 }, show: { y: 0, opacity: 1 } };
 
   return (
-    <motion.div 
-      variants={container}
-      initial="hidden"
-      animate="show"
-      className="space-y-8"
-    >
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
       <div>
         <h1 className="text-3xl font-display font-bold text-white mb-2">Renovaciones y Ajustes</h1>
         <p className="text-muted-foreground">Gestiona todas las renovaciones, devoluciones y ajustes contables.</p>
       </div>
 
-      {/* Opciones Principales */}
       <div className="grid gap-4 md:grid-cols-3">
+        {/* Renovar Cuenta */}
         <motion.div variants={item}>
-          <Dialog open={isDialogOpen && renovationType === 'account'} onOpenChange={(open) => {
-            if (!open) {
-              setIsDialogOpen(false);
-              setRenovationType(null);
-            }
-          }}>
+          <Dialog
+            open={isDialogOpen && renovationType === 'account'}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsDialogOpen(false);
+                setRenovationType(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
-              <div 
-                onClick={() => handleStartRenewal('account')}
-                className="cursor-pointer"
-              >
+              <div onClick={() => handleStartRenewal('account')} className="cursor-pointer">
                 <Card className="glass-card hover:border-primary/50 transition-all hover:shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
@@ -120,7 +110,9 @@ export default function Renovaciones() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground">Extiende la suscripción de una cuenta maestra. Se registra automáticamente como GASTO.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Extiende la suscripción de una cuenta maestra. Se registra automáticamente como GASTO.
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -130,6 +122,7 @@ export default function Renovaciones() {
               <DialogHeader>
                 <DialogTitle>Renovar Cuenta Maestra</DialogTitle>
               </DialogHeader>
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Selecciona la cuenta</label>
@@ -138,7 +131,7 @@ export default function Renovaciones() {
                       <SelectValue placeholder="Elige una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {accounts.map(acc => (
+                      {accounts.map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
                           {acc.serviceName} - {acc.email}
                         </SelectItem>
@@ -150,22 +143,22 @@ export default function Renovaciones() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Días de renovación</label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       min="1"
                       value={renewalDays}
-                      onChange={e => setRenewalDays(parseInt(e.target.value) || 30)}
+                      onChange={(e) => setRenewalDays(parseInt(e.target.value) || 30)}
                       className="glass-input"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Costo</label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       min="0"
                       step="0.01"
                       value={cost}
-                      onChange={e => setCost(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setCost(parseFloat(e.target.value) || 0)}
                       className="glass-input"
                       placeholder="0.00"
                     />
@@ -174,34 +167,50 @@ export default function Renovaciones() {
 
                 {selectedAccountData && (
                   <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg text-sm">
-                    <p className="text-blue-200"><strong>Resumen:</strong></p>
+                    <p className="text-blue-200">
+                      <strong>Resumen:</strong>
+                    </p>
                     <p className="text-blue-200/80">Cuenta: {selectedAccountData.serviceName}</p>
-                    <p className="text-blue-200/80">Vence: {format(new Date(selectedAccountData.expirationDate), 'dd MMM yyyy')}</p>
-                    <p className="text-blue-200/80">Nueva fecha: {format(new Date(new Date(selectedAccountData.expirationDate).getTime() + renewalDays * 24 * 60 * 60 * 1000), 'dd MMM yyyy')}</p>
+                    <p className="text-blue-200/80">Email: {selectedAccountData.email}</p>
+                    <p className="text-blue-200/80">
+                      Vence: {format(new Date(selectedAccountData.expirationDate), 'dd MMM yyyy')}
+                    </p>
+                    <p className="text-blue-200/80">
+                      Nueva fecha:{' '}
+                      {format(
+                        new Date(new Date(selectedAccountData.expirationDate).getTime() + renewalDays * 24 * 60 * 60 * 1000),
+                        'dd MMM yyyy'
+                      )}
+                    </p>
                   </div>
                 )}
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-white/10">Cancelar</Button>
-                <Button onClick={handleConfirmRenewal} className="bg-primary text-white">Confirmar Renovación</Button>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-white/10">
+                  Cancelar
+                </Button>
+                <Button onClick={handleConfirmRenewal} className="bg-primary text-white">
+                  Confirmar Renovación
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </motion.div>
 
+        {/* Renovar Perfil */}
         <motion.div variants={item}>
-          <Dialog open={isDialogOpen && renovationType === 'profile'} onOpenChange={(open) => {
-            if (!open) {
-              setIsDialogOpen(false);
-              setRenovationType(null);
-            }
-          }}>
+          <Dialog
+            open={isDialogOpen && renovationType === 'profile'}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsDialogOpen(false);
+                setRenovationType(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
-              <div 
-                onClick={() => handleStartRenewal('profile')}
-                className="cursor-pointer"
-              >
+              <div onClick={() => handleStartRenewal('profile')} className="cursor-pointer">
                 <Card className="glass-card hover:border-primary/50 transition-all hover:shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
@@ -209,7 +218,9 @@ export default function Renovaciones() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground">Extiende la suscripción de un perfil vendido. Se registra automáticamente como GANANCIA.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Extiende la suscripción de un perfil vendido. Se registra automáticamente como GANANCIA.
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -219,20 +230,24 @@ export default function Renovaciones() {
               <DialogHeader>
                 <DialogTitle>Renovar Perfil Vendido</DialogTitle>
               </DialogHeader>
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Selecciona la cuenta maestra</label>
-                  <Select value={selectedAccount} onValueChange={(val) => {
-                    setSelectedAccount(val);
-                    setSelectedProfile('');
-                  }}>
+                  <Select
+                    value={selectedAccount}
+                    onValueChange={(val) => {
+                      setSelectedAccount(val);
+                      setSelectedProfile('');
+                    }}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Elige una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {accounts.map(acc => (
+                      {accounts.map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
-                          {acc.serviceName}
+                          {acc.serviceName} - {acc.email}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -247,37 +262,40 @@ export default function Renovaciones() {
                         <SelectValue placeholder="Elige un perfil" />
                       </SelectTrigger>
                       <SelectContent className="bg-popover border-white/10 text-white">
-                        {selectedAccountData.profiles
-                          .filter(p => p.status !== 'disponible' && p.endDate)
-                          .map(profile => (
+                        {(selectedAccountData.profiles ?? [])
+                          .filter((p: any) => p.status !== 'disponible' && p.endDate)
+                          .map((profile: any) => (
                             <SelectItem key={profile.id} value={profile.id}>
-                              {profile.name} - {profile.clientId || 'Sin cliente'}
+                              {profile.name} — {selectedAccountData.email}
                             </SelectItem>
                           ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Cuenta seleccionada: <span className="text-white">{selectedAccountData.email}</span>
+                    </p>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Días de renovación</label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       min="1"
                       value={renewalDays}
-                      onChange={e => setRenewalDays(parseInt(e.target.value) || 30)}
+                      onChange={(e) => setRenewalDays(parseInt(e.target.value) || 30)}
                       className="glass-input"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Precio</label>
-                    <Input 
-                      type="number" 
+                    <Input
+                      type="number"
                       min="0"
                       step="0.01"
                       value={cost}
-                      onChange={e => setCost(parseFloat(e.target.value) || 0)}
+                      onChange={(e) => setCost(parseFloat(e.target.value) || 0)}
                       className="glass-input"
                       placeholder="0.00"
                     />
@@ -286,13 +304,24 @@ export default function Renovaciones() {
 
                 {selectedProfileData && (
                   <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-lg text-sm">
-                    <p className="text-emerald-200"><strong>Resumen:</strong></p>
+                    <p className="text-emerald-200">
+                      <strong>Resumen:</strong>
+                    </p>
+                    <p className="text-emerald-200/80">Cuenta: {selectedAccountData?.email}</p>
                     <p className="text-emerald-200/80">Perfil: {selectedProfileData.name}</p>
                     <p className="text-emerald-200/80">Cliente: {selectedProfileData.clientId || 'N/A'}</p>
-                    {selectedProfileData.endDate && (
+                    {!!selectedProfileData.endDate && (
                       <>
-                        <p className="text-emerald-200/80">Vence: {format(new Date(selectedProfileData.endDate), 'dd MMM yyyy')}</p>
-                        <p className="text-emerald-200/80">Nueva fecha: {format(new Date(new Date(selectedProfileData.endDate).getTime() + renewalDays * 24 * 60 * 60 * 1000), 'dd MMM yyyy')}</p>
+                        <p className="text-emerald-200/80">
+                          Vence: {format(new Date(selectedProfileData.endDate), 'dd MMM yyyy')}
+                        </p>
+                        <p className="text-emerald-200/80">
+                          Nueva fecha:{' '}
+                          {format(
+                            new Date(new Date(selectedProfileData.endDate).getTime() + renewalDays * 24 * 60 * 60 * 1000),
+                            'dd MMM yyyy'
+                          )}
+                        </p>
                       </>
                     )}
                   </div>
@@ -300,25 +329,30 @@ export default function Renovaciones() {
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-white/10">Cancelar</Button>
-                <Button onClick={handleConfirmRenewal} className="bg-primary text-white">Confirmar Renovación</Button>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-white/10">
+                  Cancelar
+                </Button>
+                <Button onClick={handleConfirmRenewal} className="bg-primary text-white">
+                  Confirmar Renovación
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </motion.div>
 
+        {/* Devolución */}
         <motion.div variants={item}>
-          <Dialog open={isDialogOpen && renovationType === 'refund'} onOpenChange={(open) => {
-            if (!open) {
-              setIsDialogOpen(false);
-              setRenovationType(null);
-            }
-          }}>
+          <Dialog
+            open={isDialogOpen && renovationType === 'refund'}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsDialogOpen(false);
+                setRenovationType(null);
+              }
+            }}
+          >
             <DialogTrigger asChild>
-              <div 
-                onClick={() => handleStartRenewal('refund')}
-                className="cursor-pointer"
-              >
+              <div onClick={() => handleStartRenewal('refund')} className="cursor-pointer">
                 <Card className="glass-card hover:border-primary/50 transition-all hover:shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]">
                   <CardHeader>
                     <CardTitle className="text-white flex items-center gap-2">
@@ -326,7 +360,9 @@ export default function Renovaciones() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground">Procesa una devolución parcial o total. Se registra automáticamente como GASTO.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Procesa una devolución parcial o total. Se registra automáticamente como GASTO.
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -336,20 +372,24 @@ export default function Renovaciones() {
               <DialogHeader>
                 <DialogTitle>Registrar Devolución</DialogTitle>
               </DialogHeader>
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Selecciona el perfil</label>
-                  <Select value={selectedAccount} onValueChange={(val) => {
-                    setSelectedAccount(val);
-                    setSelectedProfile('');
-                  }}>
+                  <Select
+                    value={selectedAccount}
+                    onValueChange={(val) => {
+                      setSelectedAccount(val);
+                      setSelectedProfile('');
+                    }}
+                  >
                     <SelectTrigger className="glass-input">
                       <SelectValue placeholder="Elige una cuenta" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-white/10 text-white">
-                      {accounts.map(acc => (
+                      {accounts.map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
-                          {acc.serviceName}
+                          {acc.serviceName} - {acc.email}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -364,9 +404,9 @@ export default function Renovaciones() {
                         <SelectValue placeholder="Elige un perfil" />
                       </SelectTrigger>
                       <SelectContent className="bg-popover border-white/10 text-white">
-                        {selectedAccountData.profiles
-                          .filter(p => p.status !== 'disponible')
-                          .map(profile => (
+                        {(selectedAccountData.profiles ?? [])
+                          .filter((p: any) => p.status !== 'disponible')
+                          .map((profile: any) => (
                             <SelectItem key={profile.id} value={profile.id}>
                               {profile.name} - ${profile.price || 0}
                             </SelectItem>
@@ -378,12 +418,12 @@ export default function Renovaciones() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Monto de devolución</label>
-                  <Input 
-                    type="number" 
+                  <Input
+                    type="number"
                     min="0"
                     step="0.01"
                     value={refundData.amount}
-                    onChange={e => setRefundData({...refundData, amount: parseFloat(e.target.value) || 0})}
+                    onChange={(e) => setRefundData({ ...refundData, amount: parseFloat(e.target.value) || 0 })}
                     className="glass-input"
                     placeholder="0.00"
                   />
@@ -391,9 +431,9 @@ export default function Renovaciones() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Motivo de la devolución</label>
-                  <Textarea 
+                  <Textarea
                     value={refundData.reason}
-                    onChange={e => setRefundData({...refundData, reason: e.target.value})}
+                    onChange={(e) => setRefundData({ ...refundData, reason: e.target.value })}
                     placeholder="Ej: Servicio falló, Error de cuenta, Cliente insatisfecho..."
                     className="glass-input min-h-24"
                   />
@@ -406,15 +446,18 @@ export default function Renovaciones() {
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-white/10">Cancelar</Button>
-                <Button onClick={handleProcessRefund} className="bg-destructive text-white">Confirmar Devolución</Button>
+                <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="border-white/10">
+                  Cancelar
+                </Button>
+                <Button onClick={handleProcessRefund} className="bg-destructive text-white">
+                  Confirmar Devolución
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </motion.div>
       </div>
 
-      {/* Información */}
       <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
@@ -428,11 +471,11 @@ export default function Renovaciones() {
           </div>
           <div>
             <p className="text-white font-medium mb-1">✓ Renovar Perfil Vendido</p>
-            <p>Extiende la suscripción de un perfil que ya fue vendido a un cliente. Se registra automáticamente como GANANCIA en finanzas.</p>
+            <p>Extiende la suscripción de un perfil vendido. Se registra automáticamente como GANANCIA en finanzas.</p>
           </div>
           <div>
             <p className="text-white font-medium mb-1">✓ Registrar Devolución</p>
-            <p>Procesa una devolución a un cliente. Se registra automáticamente como GASTO en finanzas con la razón indicada.</p>
+            <p>Procesa una devolución. Se registra automáticamente como GASTO con la razón indicada.</p>
           </div>
         </CardContent>
       </Card>

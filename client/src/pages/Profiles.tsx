@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Edit, RotateCw, Trash2, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, format, parse, isValid } from 'date-fns';
 import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 
 function safeDate(value: any): Date | null {
   if (!value) return null;
@@ -27,6 +28,18 @@ const money = (v: any) => {
 
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
+// ✅ auto-formato dd/MM/yyyy mientras escribe (solo números + inserta /)
+const formatDDMMYYYY = (input: string) => {
+  const digits = (input || '').replace(/\D/g, '').slice(0, 8); // ddmmyyyy
+  const dd = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const yyyy = digits.slice(4, 8);
+
+  if (digits.length <= 2) return dd;
+  if (digits.length <= 4) return `${dd}/${mm}`;
+  return `${dd}/${mm}/${yyyy}`;
+};
+
 export default function Profiles() {
   const { accounts, clients, updateProfile, renewProfile, deleteProfile, services, getServiceColor } = useStreaming();
 
@@ -34,7 +47,6 @@ export default function Profiles() {
   const clientsSafe = clients ?? [];
   const servicesSafe = services ?? [];
 
-  // helpers servicio (ID primero, fallback por nombre CI)
   const getServiceById = (id?: string) => (id ? servicesSafe.find((s: any) => s.id === id) ?? null : null);
 
   const getServiceByNameCI = (name?: string) => {
@@ -83,6 +95,7 @@ export default function Profiles() {
     clientId: '',
     phone: '',
     price: '',
+    endDate: '', // ✅ NUEVO: dd/MM/yyyy
   });
 
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -100,17 +113,37 @@ export default function Profiles() {
       clientId: profile.clientId ?? '',
       phone: profile.phone ?? '',
       price: profile.price != null ? String(profile.price) : '',
+      endDate: profile.endDate ? format(new Date(profile.endDate), 'dd/MM/yyyy') : '',
     });
   };
 
   const handleSave = async (accountId: string, profileId: string) => {
+    // ✅ dd/MM/yyyy -> ISO
+    let endDateISO: string | null | undefined = undefined;
+    const endText = (editData.endDate || '').trim();
+
+    if (endText) {
+      const parsed = parse(endText, 'dd/MM/yyyy', new Date());
+      if (!isValid(parsed)) {
+        toast.error('Fecha de vencimiento inválida. Usa formato dd/MM/aaaa');
+        return;
+      }
+      parsed.setHours(0, 0, 0, 0);
+      endDateISO = parsed.toISOString();
+    } else {
+      // permitir borrar fecha
+      endDateISO = null;
+    }
+
     await updateProfile(accountId, profileId, {
       name: editData.name,
       pin: editData.pin?.trim() ? editData.pin.trim() : null,
       clientId: editData.clientId?.trim() ? editData.clientId.trim() : null,
       phone: editData.phone?.trim() ? editData.phone.trim() : null,
       price: editData.price === '' ? null : Number(editData.price),
+      endDate: endDateISO,
     });
+
     setEditingId(null);
   };
 
@@ -180,6 +213,7 @@ export default function Profiles() {
             const isExpanded = expandedAccount === account.id;
             if (accountProfiles.length === 0) return null;
 
+            const baseServiceName = getBaseServiceNameForAccount(account);
             const serviceDisplayName = getServiceDisplayNameForAccount(account);
             const serviceColor = getServiceColorForAccount(account);
             const serviceImage = getServiceImageForAccount(account);
@@ -292,29 +326,21 @@ export default function Profiles() {
                                       />
                                     </div>
 
+                                    {/* ✅ NUEVO: Vencimiento editable */}
                                     <div className="col-span-1 md:col-span-2">
-                                      <label className="text-[10px] text-muted-foreground">Cliente</label>
-                                      <Select
-                                        value={editData.clientId || '__none__'}
-                                        onValueChange={(val) =>
-                                          setEditData({ ...editData, clientId: val === '__none__' ? '' : val })
-                                        }
-                                      >
-                                        <SelectTrigger className="glass-input h-9">
-                                          <SelectValue placeholder="Seleccionar" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-popover border-white/10 text-white">
-                                          <SelectItem value="__none__">Sin asignar</SelectItem>
-                                          {clientsSafe.map((c) => (
-                                            <SelectItem key={c.id} value={c.id}>
-                                              {c.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                                      <label className="text-[10px] text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                                      <Input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={10}
+                                        className="glass-input h-9"
+                                        placeholder="31/01/2026"
+                                        value={editData.endDate}
+                                        onChange={(e) => setEditData({ ...editData, endDate: formatDDMMYYYY(e.target.value) })}
+                                      />
                                     </div>
 
-                                    <div className="col-span-2 md:col-span-1 flex md:justify-center">
+                                    <div className="col-span-1 md:col-span-1 flex md:justify-center">
                                       {statusBadge(daysLeft)}
                                     </div>
 
@@ -338,9 +364,7 @@ export default function Profiles() {
                                   <div className="grid grid-cols-12 gap-2 items-center">
                                     <div className="col-span-7 md:col-span-3 min-w-0">
                                       <p className="text-sm text-white font-medium truncate">{profile.name}</p>
-                                      <p className="text-[11px] text-muted-foreground truncate">
-                                        {getClientName(profile.clientId)}
-                                      </p>
+                                      <p className="text-[11px] text-muted-foreground truncate">{getClientName(profile.clientId)}</p>
                                     </div>
 
                                     <div className="hidden md:block md:col-span-2 min-w-0">
@@ -408,12 +432,10 @@ export default function Profiles() {
                                         <span className="text-white">Tel:</span> {profile.phone || '—'}
                                       </span>
                                       <span className="truncate">
-                                        <span className="text-white">PIN:</span>{' '}
-                                        <span className="font-mono text-white">{profile.pin || '—'}</span>
+                                        <span className="text-white">PIN:</span> <span className="font-mono text-white">{profile.pin || '—'}</span>
                                       </span>
                                       <span className="truncate">
-                                        <span className="text-white">Precio:</span>{' '}
-                                        <span className="text-white font-medium">{money(profile.price)}</span>
+                                        <span className="text-white">Precio:</span> <span className="text-white font-medium">{money(profile.price)}</span>
                                       </span>
                                     </div>
                                   </div>
