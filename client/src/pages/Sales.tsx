@@ -56,6 +56,14 @@ export default function Sales() {
   const servicesSafe = services ?? [];
   const clientsSafe = clients ?? [];
 
+  // ✅ NUEVO helper: obtener nombre del cliente por clientId (para mostrarlo en vez de "Activo")
+  const getClientNameById = (clientId?: string | null) => {
+    const id = String(clientId ?? '').trim();
+    if (!id) return '';
+    const c = clientsSafe.find((x: any) => x.id === id);
+    return String(c?.name ?? '').trim();
+  };
+
   // ---------- helpers servicio ----------
   const getServiceById = (id?: string) => (id ? servicesSafe.find((s: any) => s.id === id) ?? null : null);
 
@@ -334,7 +342,9 @@ export default function Sales() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-display font-bold text-white mb-1 sm:mb-2">Ventas</h1>
-          <p className="text-muted-foreground text-sm sm:text-base">Vende perfiles disponibles o vende una cuenta completa.</p>
+          <p className="text-muted-foreground text-sm sm:text-base">
+            Vende perfiles disponibles o vende una cuenta completa.
+          </p>
         </div>
 
         <Dialog open={isSellDialogOpen} onOpenChange={setIsSellDialogOpen}>
@@ -637,7 +647,11 @@ export default function Sales() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMsgOpen(false)} className="border-white/10 hover:bg-white/5 text-white">
+            <Button
+              variant="outline"
+              onClick={() => setMsgOpen(false)}
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
               Cerrar
             </Button>
           </DialogFooter>
@@ -673,7 +687,12 @@ export default function Sales() {
           const serviceImage = getServiceImageForAccount(account);
 
           return (
-            <motion.div key={account.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2 }}>
+            <motion.div
+              key={account.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+            >
               <Card className="glass-card overflow-hidden">
                 <CardHeader className="bg-white/5 border-b border-white/5 pb-2 sm:pb-3">
                   <div className="flex justify-between items-start gap-2">
@@ -707,7 +726,11 @@ export default function Sales() {
                       )}
                     </div>
 
-                    <div className={`text-right text-xs sm:text-sm font-bold ${availableCount > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div
+                      className={`text-right text-xs sm:text-sm font-bold ${
+                        availableCount > 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
                       {availableCount}/{totalSlots}
                     </div>
                   </div>
@@ -715,11 +738,19 @@ export default function Sales() {
 
                 <CardContent className="pt-3 sm:pt-4 space-y-2 sm:space-y-3">
                   <div className="space-y-2">
-                    <h4 className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Slots</h4>
+                    <h4 className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Slots
+                    </h4>
 
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
                       {displayProfiles.map((p: any) => {
                         const clickable = !sold && (p.status === 'disponible' || p.status === 'activo');
+
+                        // ✅ NUEVO: label para estado activo = nombre del cliente (si existe)
+                        const activeLabel = (() => {
+                          const clientName = getClientNameById(p?.clientId);
+                          return clientName || 'Activo';
+                        })();
 
                         return (
                           <div
@@ -746,14 +777,18 @@ export default function Sales() {
                             }}
                             title={sold ? 'Cuenta vendida' : clickable ? 'Tocar' : ''}
                           >
-                            <span className={`truncate ${p.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
+                            <span
+                              className={`truncate ${
+                                p.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
+                              }`}
+                            >
                               {p.name}
                             </span>
 
                             <div className="flex items-center gap-1">
                               {p.status === 'activo' ? (
-                                <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                                  Activo
+                                <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 max-w-[120px] truncate">
+                                  {activeLabel}
                                 </span>
                               ) : p.status === 'vencido' ? (
                                 <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/25">
