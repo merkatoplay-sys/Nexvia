@@ -80,7 +80,6 @@ export default function Sales() {
     const byId = acc.serviceId ? getServiceById(acc.serviceId) : null;
     if (byId) return byId;
 
-    // fallback por nombre, tolerante (case-insensitive)
     if (acc.serviceName) return getServiceByNameCI(acc.serviceName);
     return null;
   };
@@ -186,7 +185,6 @@ export default function Sales() {
     const svc = getServiceById(selectedServiceId);
     return accountsSafe.filter((a: any) => {
       if (a.serviceId) return a.serviceId === selectedServiceId;
-      // fallback por nombre CI
       return !!svc?.name && norm(a.serviceName) === norm(svc.name);
     });
   }, [accountsSafe, selectedServiceId, servicesSafe]);
@@ -311,7 +309,7 @@ export default function Sales() {
     }
   };
 
-  // UI helper: mini avatar servicio (sin robar espacio)
+  // UI helper: mini avatar servicio
   const ServiceMini = ({ id, name }: { id?: string; name?: string }) => {
     const svc = id ? getServiceById(id) : null;
     const color = svc?.color ?? '#6366f1';
@@ -497,7 +495,8 @@ export default function Sales() {
                                 )}
                               </span>
                               <span className="truncate">
-                                {acc.email} — {svcDisplay} {sold ? '(Vendida)' : saleMode === 'perfil' ? `(${avail} disp.)` : ''}
+                                {acc.email} — {svcDisplay}{' '}
+                                {sold ? '(Vendida)' : saleMode === 'perfil' ? `(${avail} disp.)` : ''}
                               </span>
                             </div>
                           </SelectItem>
@@ -785,8 +784,12 @@ export default function Sales() {
 
                             <div className="flex items-center gap-1">
                               {p.status === 'activo' ? (
-                                <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
-                                  Activo
+                                // ✅ CAMBIO: en vez de decir "Activo", muestra el nombre guardado
+                                <span
+                                  className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 max-w-[110px] truncate"
+                                  title="Activo"
+                                >
+                                  {(String(p.name ?? '').trim() || 'Activo') as any}
                                 </span>
                               ) : p.status === 'vencido' ? (
                                 <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/25">
