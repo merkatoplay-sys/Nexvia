@@ -1,3 +1,4 @@
+// routes.ts
 import type { Express } from "express";
 import { type Server } from "http";
 import cookieParser from "cookie-parser";
@@ -615,8 +616,8 @@ export async function registerRoutes(
     }
   });
 
-  // ✅✅✅ NUEVO: Endpoint para cron de notificaciones Telegram
-  // GET /api/cron/notify?secret=TU_SECRETO
+  // ✅✅✅ Endpoint para cron de notificaciones Telegram
+  // GET /api/cron/notify?secret=TU_SECRETO&dry=1
   app.get("/api/cron/notify", async (req, res) => {
     const secret = String(req.query.secret || "");
     const expected = process.env.CRON_SECRET || "";
@@ -624,8 +625,10 @@ export async function registerRoutes(
     if (!expected) return res.status(500).json({ message: "CRON_SECRET no configurado" });
     if (secret !== expected) return res.status(401).json({ message: "No autorizado" });
 
+    const dry = String(req.query.dry || "") === "1";
+
     try {
-      const result = await runExpiryNotifications();
+      const result = await runExpiryNotifications({ dryRun: dry });
       return res.json({ ok: true, ...result });
     } catch (err: any) {
       console.error(err);

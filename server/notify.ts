@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { accounts, profiles, settings, services } from "@shared/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or, isNull } from "drizzle-orm";
 
 const TZ = "America/Guatemala";
 
@@ -90,37 +90,43 @@ function buildServiceDisplay(baseServiceName: string, planName?: string | null) 
   return base;
 }
 
-export async function runExpiryNotifications() {
+type RunOpts = {
+  dryRun?: boolean; // ✅ no manda telegram, solo cuenta
+};
+
+export async function runExpiryNotifications(opts: RunOpts = {}) {
   const allSettings = await db.select().from(settings);
 
   let sent = 0;
   let scannedUsers = 0;
 
+  // ✅ Debug counts
+  let accountsCandidates = 0;
+  let profilesCandidates = 0;
+  let accountsMatched = 0;
+  let profilesMatched = 0;
+
   for (const s of allSettings) {
     scannedUsers++;
 
+    // Reglas de activación
     if (!s.notificationsEnabled) continue;
     if (s.notificationChannel !== "telegram") continue;
     if (!s.telegramBotToken || !s.telegramChatId) continue;
 
     const advance = Math.max(0, Math.min(3, Number(s.daysBeforeExpiry || 0)));
 
-    // ✅ siempre manda el mismo día (0)
-    const daysSet = new Set<number>([0, advance]);
-
-    // ✅ si eliges 2, también manda 1
-    if (advance >= 2) daysSet.add(1);
-
-    // ✅ si eliges 3, también manda 2 y 1
-    if (advance >= 3) {
-      daysSet.add(2);
-      daysSet.add(1);
-    }
+    // manda en 0..advance
+    const daysSet = new Set<number>();
+    for (let i = 0; i <= advance; i++) daysSet.add(i);
 
     const accountTpl = (s.telegramAccountTemplate || "").trim() || DEFAULT_ACCOUNT_TEMPLATE;
     const profileTpl = (s.telegramProfileTemplate || "").trim() || DEFAULT_PROFILE_TEMPLATE;
 
-    // 1) cuentas maestras por vencer (con leftJoin a services para nombre actualizado)
+    // ✅ isArchived NULL debe contar como NO archivado
+    const accountNotArchived = or(eq(accounts.isArchived, false), isNull(accounts.isArchived));
+
+    // 1) cuentas maestras por vencer
     const userAccounts = await db
       .select({
         id: accounts.id,
@@ -129,17 +135,22 @@ export async function runExpiryNotifications() {
         password: accounts.password,
         expirationDate: accounts.expirationDate,
         serviceNameLegacy: accounts.serviceName,
-        planName: (accounts as any).planName, // por si TS te marca, depende tu typegen
+        planName: (accounts as any).planName,
         serviceNameCurrent: services.name,
       })
       .from(accounts)
       .leftJoin(services, eq(accounts.serviceId, services.id))
-      .where(and(eq(accounts.userId, s.userId), eq(accounts.isArchived, false)));
+      .where(and(eq(accounts.userId, s.userId), accountNotArchived));
+
+    accountsCandidates += userAccounts.length;
 
     for (const a of userAccounts) {
       if (!a.expirationDate) continue;
+
       const left = daysLeftInTZ(new Date(a.expirationDate as any), TZ);
       if (!daysSet.has(left)) continue;
+
+      accountsMatched++;
 
       const baseServiceName = String(a.serviceNameCurrent || a.serviceNameLegacy || "").trim();
       const planName = String((a as any).planName ?? "").trim();
@@ -157,11 +168,13 @@ export async function runExpiryNotifications() {
         accountEndDate: formatDateGT(new Date(a.expirationDate as any), TZ),
       });
 
-      await sendTelegram(s.telegramBotToken, s.telegramChatId, msg);
-      sent++;
+      if (!opts.dryRun) {
+        await sendTelegram(s.telegramBotToken, s.telegramChatId, msg);
+        sent++;
+      }
     }
 
-    // 2) perfiles por vencer (con datos cuenta + services actual)
+    // 2) perfiles por vencer
     const userProfiles = await db
       .select({
         profileId: profiles.id,
@@ -183,14 +196,19 @@ export async function runExpiryNotifications() {
         and(
           eq(profiles.userId, s.userId),
           eq(profiles.status, "activo"),
-          eq(accounts.isArchived, false)
+          accountNotArchived
         )
       );
 
+    profilesCandidates += userProfiles.length;
+
     for (const p of userProfiles) {
       if (!p.profileEndDate) continue;
+
       const left = daysLeftInTZ(new Date(p.profileEndDate as any), TZ);
       if (!daysSet.has(left)) continue;
+
+      profilesMatched++;
 
       const baseServiceName = String(p.serviceNameCurrent || p.serviceNameLegacy || "").trim();
       const planName = String((p as any).planName ?? "").trim();
@@ -211,10 +229,20 @@ export async function runExpiryNotifications() {
         profileEndDate: formatDateGT(new Date(p.profileEndDate as any), TZ),
       });
 
-      await sendTelegram(s.telegramBotToken, s.telegramChatId, msg);
-      sent++;
+      if (!opts.dryRun) {
+        await sendTelegram(s.telegramBotToken, s.telegramChatId, msg);
+        sent++;
+      }
     }
   }
 
-  return { scannedUsers, sent };
+  return {
+    scannedUsers,
+    sent,
+    accountsCandidates,
+    profilesCandidates,
+    accountsMatched,
+    profilesMatched,
+    dryRun: !!opts.dryRun,
+  };
 }
