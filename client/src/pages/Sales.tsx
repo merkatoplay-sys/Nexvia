@@ -48,6 +48,16 @@ const applyTemplate = (tpl: string, vars: Record<string, string>) => {
 
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
+// ✅ ORDEN ESTABLE (igual que Accounts)
+const sortProfilesStable = (profiles: any[]) => {
+  const arr = Array.isArray(profiles) ? [...profiles] : [];
+  return arr.sort((a: any, b: any) => {
+    const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return ta - tb;
+  });
+};
+
 export default function Sales() {
   const { accounts, services, sellProfile, sellAccount, clients, settings } = useStreaming();
   const [location] = useLocation();
@@ -55,14 +65,6 @@ export default function Sales() {
   const accountsSafe = accounts ?? [];
   const servicesSafe = services ?? [];
   const clientsSafe = clients ?? [];
-
-  // ✅ NUEVO helper: obtener nombre del cliente por clientId (para mostrarlo en vez de "Activo")
-  const getClientNameById = (clientId?: string | null) => {
-    const id = String(clientId ?? '').trim();
-    if (!id) return '';
-    const c = clientsSafe.find((x: any) => x.id === id);
-    return String(c?.name ?? '').trim();
-  };
 
   // ---------- helpers servicio ----------
   const getServiceById = (id?: string) => (id ? servicesSafe.find((s: any) => s.id === id) ?? null : null);
@@ -189,7 +191,11 @@ export default function Sales() {
     });
   }, [accountsSafe, selectedServiceId, servicesSafe]);
 
-  const selectedAccountProfiles = (selectedAccount?.profiles ?? []) as any[];
+  // ✅ ORDENAR perfiles del account seleccionado (igual que Accounts)
+  const selectedAccountProfiles = useMemo(() => {
+    return sortProfilesStable((selectedAccount?.profiles ?? []) as any[]);
+  }, [selectedAccount]);
+
   const availableProfiles = selectedAccountProfiles.filter((p: any) => p.status === 'disponible');
 
   const canConfirm =
@@ -280,9 +286,7 @@ export default function Sales() {
     const serviceDisplayName = getServiceDisplayNameForAccount(acc);
 
     const vars: Record<string, string> = {
-      // ✅ Backward compatible: {{serviceName}} ahora devuelve el DISPLAY (incluye Plan si hay)
       serviceName: String(serviceDisplayName ?? ''),
-      // ✅ Extra variables opcionales:
       serviceDisplayName: String(serviceDisplayName ?? ''),
       baseServiceName: String(baseServiceName ?? ''),
       planName: String(planName ?? ''),
@@ -461,7 +465,7 @@ export default function Sales() {
                     <SelectContent className="bg-popover border-white/10 text-white">
                       {filteredAccounts.map((acc: any) => {
                         const sold = isAccountSold(acc);
-                        const profiles = (acc.profiles ?? []) as any[];
+                        const profiles = sortProfilesStable((acc.profiles ?? []) as any[]);
                         const avail = profiles.filter((p: any) => p.status === 'disponible').length;
 
                         const disableForProfile = saleMode === 'perfil' && (sold || avail === 0);
@@ -493,8 +497,7 @@ export default function Sales() {
                                 )}
                               </span>
                               <span className="truncate">
-                                {acc.email} — {svcDisplay}{' '}
-                                {sold ? '(Vendida)' : saleMode === 'perfil' ? `(${avail} disp.)` : ''}
+                                {acc.email} — {svcDisplay} {sold ? '(Vendida)' : saleMode === 'perfil' ? `(${avail} disp.)` : ''}
                               </span>
                             </div>
                           </SelectItem>
@@ -661,7 +664,8 @@ export default function Sales() {
       {/* Cards */}
       <div className="grid gap-3 sm:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3">
         {filteredAccounts.map((account: any) => {
-          const realProfiles = (account.profiles ?? []) as any[];
+          // ✅ ORDEN ESTABLE AQUI TAMBIÉN
+          const realProfiles = sortProfilesStable((account.profiles ?? []) as any[]);
           const totalSlots = Number(account.totalProfiles || 0);
 
           const displayProfiles = Array.from({ length: totalSlots }, (_, idx) => {
@@ -746,12 +750,6 @@ export default function Sales() {
                       {displayProfiles.map((p: any) => {
                         const clickable = !sold && (p.status === 'disponible' || p.status === 'activo');
 
-                        // ✅ NUEVO: label para estado activo = nombre del cliente (si existe)
-                        const activeLabel = (() => {
-                          const clientName = getClientNameById(p?.clientId);
-                          return clientName || 'Activo';
-                        })();
-
                         return (
                           <div
                             key={p.id}
@@ -787,8 +785,8 @@ export default function Sales() {
 
                             <div className="flex items-center gap-1">
                               {p.status === 'activo' ? (
-                                <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 max-w-[120px] truncate">
-                                  {activeLabel}
+                                <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">
+                                  Activo
                                 </span>
                               ) : p.status === 'vencido' ? (
                                 <span className="text-[9px] sm:text-[10px] px-2 py-1 rounded bg-red-500/15 text-red-300 border border-red-500/25">
