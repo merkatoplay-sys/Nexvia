@@ -22,10 +22,10 @@ type ProfileLike = {
   phone?: string | null;
   price?: number | null;
 
-  // ✅ NUEVO: vencimiento del perfil
+  // ✅ vencimiento del perfil
   endDate?: string | null;
 
-  createdAt?: any; // ✅ por si viene del backend
+  createdAt?: any;
   __placeholder?: boolean;
 };
 
@@ -73,7 +73,7 @@ export default function Accounts() {
   const {
     accounts,
     addAccount,
-    clients,
+    // clients, // ❌ ya no lo usamos aquí
     updateProfile,
     deleteAccount,
     updateAccount,
@@ -87,7 +87,6 @@ export default function Accounts() {
 
   const accountsSafe = accounts ?? [];
   const servicesSafe = services ?? [];
-  const clientsSafe = clients ?? [];
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterService, setFilterService] = useState<string>('all'); // guarda serviceId
@@ -100,11 +99,10 @@ export default function Accounts() {
 
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: ProfileLike } | null>(null);
 
-  // ✅ editData ahora incluye endDate (dd/MM/yyyy)
+  // ✅ editData (SIN cliente)
   const [editData, setEditData] = useState({
     name: '',
     pin: '',
-    clientId: '',
     phone: '',
     price: 0,
     endDate: '',
@@ -141,8 +139,8 @@ export default function Accounts() {
     expirationDate: '', // dd/MM/yyyy
     cost: 0,
     isRenewable: true,
-    planName: '', // ✅
-    totalProfiles: 5, // ✅ NUEVO
+    planName: '',
+    totalProfiles: 5,
   });
 
   // Mover perfiles
@@ -231,7 +229,6 @@ export default function Accounts() {
         setEditData({
           name: p.name ?? '',
           pin: p.pin ?? '',
-          clientId: p.clientId ?? '',
           phone: p.phone ?? '',
           price: p.price ?? 0,
           endDate: p.endDate ? format(new Date(p.endDate), 'dd/MM/yyyy') : '',
@@ -765,9 +762,7 @@ export default function Accounts() {
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
-                                expirationDate: account.expirationDate
-                                  ? format(new Date(account.expirationDate), 'dd/MM/yyyy')
-                                  : '',
+                                expirationDate: account.expirationDate ? format(new Date(account.expirationDate), 'dd/MM/yyyy') : '',
                                 cost: Number(account.cost || 0),
                                 isRenewable: !!account.isRenewable,
                                 planName: String(account.planName ?? ''),
@@ -799,9 +794,7 @@ export default function Accounts() {
                     <div className="grid grid-cols-2 gap-2 mb-4">
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Inicio</span>
-                        <span className="text-xs font-medium text-white">
-                          {format(new Date(account.startDate), 'dd MMM')}
-                        </span>
+                        <span className="text-xs font-medium text-white">{format(new Date(account.startDate), 'dd MMM')}</span>
                       </div>
                       <div className="bg-background/40 p-2 rounded border border-white/5 text-center">
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Vence</span>
@@ -829,7 +822,6 @@ export default function Accounts() {
                               setEditData({
                                 name: profile.name ?? '',
                                 pin: profile.pin ?? '',
-                                clientId: profile.clientId ?? '',
                                 phone: profile.phone ?? '',
                                 price: profile.price ?? 0,
                                 endDate: profile.endDate ? format(new Date(profile.endDate), 'dd/MM/yyyy') : '',
@@ -846,15 +838,9 @@ export default function Accounts() {
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <User
-                              className={`h-3 w-3 shrink-0 ${
-                                profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
-                              }`}
+                              className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`}
                             />
-                            <span
-                              className={`truncate ${
-                                profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
-                              }`}
-                            >
+                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
                               {profile.name}
                             </span>
                           </div>
@@ -881,7 +867,7 @@ export default function Accounts() {
         </div>
       )}
 
-      {/* Editar perfil */}
+      {/* ✅ Editar perfil (SIN Cliente) */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
           <DialogContent
@@ -900,6 +886,9 @@ export default function Accounts() {
                   value={editData.name}
                   onChange={(e) => setEditData({ ...editData, name: e.target.value })}
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Usa aquí tu identificador del perfil (ej: “Demsi”, “MotoG200”, “Azul”).
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -933,7 +922,7 @@ export default function Accounts() {
                 </div>
               </div>
 
-              {/* ✅ NUEVO: vencimiento del perfil */}
+              {/* ✅ vencimiento del perfil */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
                 <Input
@@ -945,29 +934,7 @@ export default function Accounts() {
                   value={editData.endDate}
                   onChange={(e) => setEditData({ ...editData, endDate: formatDDMMYYYY(e.target.value) })}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Si lo dejas vacío, se borra el vencimiento del perfil.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Cliente</label>
-                <Select
-                  value={editData.clientId?.trim() ? editData.clientId : '__none__'}
-                  onValueChange={(val) => setEditData({ ...editData, clientId: val === '__none__' ? '' : val })}
-                >
-                  <SelectTrigger className="glass-input">
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-white/10 text-white">
-                    <SelectItem value="__none__">Sin asignar</SelectItem>
-                    {clientsSafe.map((c: any) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <p className="text-[11px] text-muted-foreground">Si lo dejas vacío, se borra el vencimiento del perfil.</p>
               </div>
 
               <div className="space-y-2">
@@ -1007,10 +974,10 @@ export default function Accounts() {
                   updateProfile(editingProfile.accountId, editingProfile.profile.id, {
                     name: editData.name,
                     pin: editData.pin?.trim() ? editData.pin.trim() : null,
-                    clientId: editData.clientId?.trim() ? editData.clientId.trim() : null,
                     phone: editData.phone?.trim() ? editData.phone.trim() : null,
                     price: editData.price || undefined,
-                    endDate: endISO, // ✅ NUEVO
+                    endDate: endISO,
+                    // ❌ clientId intencionalmente removido
                   } as any);
 
                   setEditingProfile(null);
@@ -1024,7 +991,7 @@ export default function Accounts() {
         </Dialog>
       )}
 
-      {/* Editar cuenta maestra (tu código igual, sin cambios relevantes) */}
+      {/* Editar cuenta maestra (sin cambios relevantes) */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
         <DialogContent
           className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
@@ -1046,13 +1013,10 @@ export default function Accounts() {
                   value={editAccountData.totalProfiles}
                   min={0}
                   max={editMaxProfiles}
-                  onChange={(e) =>
-                    setEditAccountData({ ...editAccountData, totalProfiles: parseInt(e.target.value || '0') })
-                  }
+                  onChange={(e) => setEditAccountData({ ...editAccountData, totalProfiles: parseInt(e.target.value || '0') })}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Activos actuales: <span className="text-white">{editActiveProfilesCount}</span>. No puedes bajar por
-                  debajo de los activos.
+                  Activos actuales: <span className="text-white">{editActiveProfilesCount}</span>. No puedes bajar por debajo de los activos.
                 </p>
               </div>
 
@@ -1113,9 +1077,7 @@ export default function Accounts() {
                     className="glass-input"
                     placeholder="31/01/2026"
                     value={editAccountData.expirationDate}
-                    onChange={(e) =>
-                      setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })
-                    }
+                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })}
                   />
                 </div>
 
@@ -1162,7 +1124,6 @@ export default function Accounts() {
               disabled={!editingAccount}
               onClick={async () => {
                 if (!editingAccount) return;
-
                 if (Number(editAccountData.totalProfiles || 0) < editActiveProfilesCount) return;
 
                 let expISO: string | undefined = undefined;
@@ -1201,7 +1162,7 @@ export default function Accounts() {
         </DialogContent>
       </Dialog>
 
-      {/* Mover perfiles (igual que tu código) */}
+      {/* Mover perfiles */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
         <DialogContent
           className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
