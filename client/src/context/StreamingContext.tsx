@@ -399,9 +399,14 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   });
 
   // ✅ CAMBIO: ya no borra, ahora libera el slot
-  const releaseProfileMutation = useMutation({
+ const releaseProfileMutation = useMutation({
   mutationFn: (id: string) =>
     fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+  },
 });
 
 const releaseProfile = async (profileId: string) => {
@@ -412,22 +417,26 @@ const releaseProfile = async (profileId: string) => {
     toast.error('Error al liberar perfil');
   }
 };
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
-    },
-  });
 
-  const createClientMutation = useMutation({
-    mutationFn: (client: any) => fetchAPI('/api/clients', { method: 'POST', body: JSON.stringify(client) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/clients'] }),
-  });
+const createClientMutation = useMutation({
+  mutationFn: (client: any) =>
+    fetchAPI('/api/clients', {
+      method: 'POST',
+      body: JSON.stringify(client),
+    }),
+  onSuccess: () =>
+    queryClient.invalidateQueries({ queryKey: ['/api/clients'] }),
+});
 
-  const createExpenseMutation = useMutation({
-    mutationFn: (expense: any) => fetchAPI('/api/expenses', { method: 'POST', body: JSON.stringify(expense) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
-  });
+const createExpenseMutation = useMutation({
+  mutationFn: (expense: any) =>
+    fetchAPI('/api/expenses', {
+      method: 'POST',
+      body: JSON.stringify(expense),
+    }),
+  onSuccess: () =>
+    queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
+});
 
   const voidExpenseMutation = useMutation({
     mutationFn: ({ expenseId, reason }: { expenseId: string; reason?: string }) =>
