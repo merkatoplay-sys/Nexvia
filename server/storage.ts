@@ -501,12 +501,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createExpense(expense: InsertExpense): Promise<Expense> {
+  try {
     const payload: any = { ...expense };
+
+    // ✅ Validaciones duras
+    if (!payload.userId) {
+      throw new Error("userId requerido");
+    }
+
+    const amount = Number(payload.amount);
+    if (!Number.isFinite(amount)) {
+      throw new Error("amount inválido");
+    }
+
+    if (!payload.type || !["ganancia", "gasto", "ajuste"].includes(payload.type)) {
+      throw new Error("type inválido");
+    }
+
+    payload.amount = amount;
     payload.date = toDateOrNull(payload.date) ?? new Date();
 
     const [newExpense] = await db.insert(expenses).values(payload).returning();
+
     return newExpense;
+  } catch (error) {
+    console.error("❌ ERROR createExpense:", error);
+    throw error;
   }
+}
 
   async voidExpense(expenseId: string, userId: string, reason?: string): Promise<void> {
     await db
