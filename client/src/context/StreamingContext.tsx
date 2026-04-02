@@ -400,7 +400,10 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
 
   // ✅ CAMBIO: ya no borra, ahora libera el slot
   const releaseProfileMutation = useMutation({
-    mutationFn: (id: string) => fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
+  mutationFn: (id: string) =>
+    fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
+});
+
 const releaseProfile = async (profileId: string) => {
   try {
     await releaseProfileMutation.mutateAsync(profileId);
