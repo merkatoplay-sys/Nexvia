@@ -895,15 +895,20 @@ const handleReleaseProfile = async (profileId: string) => {
     );
   })}
 </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
       {/* ✅ Editar perfil (SIN Cliente) */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
-          <DialogContent
-            className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
-            aria-describedby={undefined}
-          >
+          <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Editar Perfil: {editingProfile.profile.name}</DialogTitle>
+              <DialogTitle>Editar Perfil</DialogTitle>
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
@@ -913,18 +918,6 @@ const handleReleaseProfile = async (profileId: string) => {
                   className="glass-input"
                   value={editData.name}
                   onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Usa aquí tu identificador del perfil (ej: “Demsi”, “MotoG200”, “Azul”).
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Teléfono</label>
-                <Input
-                  className="glass-input"
-                  value={editData.phone}
-                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
                 />
               </div>
 
@@ -936,43 +929,47 @@ const handleReleaseProfile = async (profileId: string) => {
                     type={showEditProfilePin ? 'text' : 'password'}
                     value={editData.pin}
                     onChange={(e) => setEditData({ ...editData, pin: e.target.value })}
-                    placeholder="PIN"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-white"
                     onClick={() => setShowEditProfilePin((v) => !v)}
-                    title={showEditProfilePin ? 'Ocultar PIN' : 'Mostrar PIN'}
                   >
                     {showEditProfilePin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
 
-              {/* ✅ vencimiento del perfil */}
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                <label className="text-xs text-muted-foreground">Teléfono</label>
                 <Input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={10}
                   className="glass-input"
-                  placeholder="31/01/2026"
-                  value={editData.endDate}
-                  onChange={(e) => setEditData({ ...editData, endDate: formatDDMMYYYY(e.target.value) })}
+                  value={editData.phone}
+                  onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
                 />
-                <p className="text-[11px] text-muted-foreground">Si lo dejas vacío, se borra el vencimiento del perfil.</p>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Precio</label>
-                <Input
-                  type="number"
-                  className="glass-input"
-                  value={editData.price}
-                  onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value || '0') })}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Precio</label>
+                  <Input
+                    type="number"
+                    className="glass-input"
+                    value={editData.price}
+                    onChange={(e) => setEditData({ ...editData, price: parseFloat(e.target.value || '0') })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                  <Input
+                    className="glass-input"
+                    value={editData.endDate}
+                    onChange={(e) => setEditData({ ...editData, endDate: formatDDMMYYYY(e.target.value) })}
+                    maxLength={10}
+                  />
+                </div>
               </div>
             </div>
 
@@ -984,13 +981,15 @@ const handleReleaseProfile = async (profileId: string) => {
               >
                 Cancelar
               </Button>
+
               <Button
-                onClick={() => {
-                  // ✅ dd/MM/yyyy -> ISO o null
+                className="bg-primary text-white"
+                onClick={async () => {
+                  if (!editingProfile) return;
+
                   let endISO: string | null = null;
-                  const txt = (editData.endDate || '').trim();
-                  if (txt) {
-                    const parsed = parse(txt, 'dd/MM/yyyy', new Date());
+                  if (editData.endDate.trim()) {
+                    const parsed = parse(editData.endDate.trim(), 'dd/MM/yyyy', new Date());
                     if (!isValid(parsed)) {
                       toast.error('Fecha inválida. Usa formato dd/MM/aaaa');
                       return;
@@ -999,147 +998,92 @@ const handleReleaseProfile = async (profileId: string) => {
                     endISO = parsed.toISOString();
                   }
 
-                  updateProfile(editingProfile.accountId, editingProfile.profile.id, {
+                  const ok = await updateProfile(editingProfile.accountId, editingProfile.profile.id, {
                     name: editData.name,
-                    pin: editData.pin?.trim() ? editData.pin.trim() : null,
-                    phone: editData.phone?.trim() ? editData.phone.trim() : null,
-                    price: editData.price || undefined,
+                    pin: editData.pin || null,
+                    phone: editData.phone || null,
+                    price: Number(editData.price || 0),
                     endDate: endISO,
-                    // ❌ clientId intencionalmente removido
-                  } as any);
+                  });
 
-                  setEditingProfile(null);
+                  if (ok) {
+                    setEditingProfile(null);
+                  }
                 }}
-                className="bg-primary text-white"
               >
-                Guardar
+                Guardar cambios
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Editar cuenta maestra (sin cambios relevantes) */}
+      {/* ✅ Editar cuenta */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
-        <DialogContent
-          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
-          aria-describedby={undefined}
-        >
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Cuenta</DialogTitle>
           </DialogHeader>
 
-          {!editingAccount ? (
-            <p className="text-sm text-muted-foreground">No hay cuenta seleccionada.</p>
-          ) : (
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Número de perfiles (Máx: {editMaxProfiles})</label>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Email</label>
+              <Input
+                className="glass-input"
+                value={editAccountData.email}
+                onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Contraseña</label>
+              <div className="relative">
                 <Input
-                  type="number"
-                  className="glass-input"
-                  value={editAccountData.totalProfiles}
-                  min={0}
-                  max={editMaxProfiles}
-                  onChange={(e) => setEditAccountData({ ...editAccountData, totalProfiles: parseInt(e.target.value || '0') })}
+                  className="glass-input pr-10"
+                  type={showEditAccountPassword ? 'text' : 'password'}
+                  value={editAccountData.password}
+                  onChange={(e) => setEditAccountData({ ...editAccountData, password: e.target.value })}
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Activos actuales: <span className="text-white">{editActiveProfilesCount}</span>. No puedes bajar por debajo de los activos.
-                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-white"
+                  onClick={() => setShowEditAccountPassword((v) => !v)}
+                >
+                  {showEditAccountPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Plan / Nombre</label>
-                <Input
-                  className="glass-input"
-                  placeholder="Ej: Premium 3 meses, 4K..."
-                  value={editAccountData.planName}
-                  onChange={(e) => setEditAccountData({ ...editAccountData, planName: e.target.value })}
-                  autoComplete="off"
-                  name="planNameEdit"
-                />
-                <p className="text-[11px] text-muted-foreground">Nota: El servicio no se puede cambiar, solo el nombre/plan.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Email</label>
-                <Input
-                  className="glass-input"
-                  value={editAccountData.email}
-                  onChange={(e) => setEditAccountData({ ...editAccountData, email: e.target.value })}
-                  autoComplete="off"
-                  name="serviceEmailEdit"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Contraseña</label>
-                <div className="relative">
-                  <Input
-                    className="glass-input pr-10"
-                    value={editAccountData.password}
-                    onChange={(e) => setEditAccountData({ ...editAccountData, password: e.target.value })}
-                    type={showEditAccountPassword ? 'text' : 'password'}
-                    autoComplete="new-password"
-                    name="serviceSecretEdit"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 text-muted-foreground hover:text-white"
-                    onClick={() => setShowEditAccountPassword((v) => !v)}
-                    title={showEditAccountPassword ? 'Ocultar' : 'Mostrar'}
-                  >
-                    {showEditAccountPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={10}
-                    className="glass-input"
-                    placeholder="31/01/2026"
-                    value={editAccountData.expirationDate}
-                    onChange={(e) => setEditAccountData({ ...editAccountData, expirationDate: formatDDMMYYYY(e.target.value) })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">¿Renovable?</label>
-                  <Select
-                    value={editAccountData.isRenewable ? 'si' : 'no'}
-                    onValueChange={(val) => setEditAccountData({ ...editAccountData, isRenewable: val === 'si' })}
-                  >
-                    <SelectTrigger className="glass-input">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover border-white/10 text-white">
-                      <SelectItem value="si">Sí</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Costo (informativo)</label>
+                <label className="text-xs text-muted-foreground">Costo</label>
                 <Input
                   type="number"
                   className="glass-input"
                   value={editAccountData.cost}
                   onChange={(e) => setEditAccountData({ ...editAccountData, cost: parseFloat(e.target.value || '0') })}
                 />
-                <p className="text-[11px] text-muted-foreground">Nota: cambiar el costo aquí NO cambia el gasto histórico.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
+                <Input
+                  className="glass-input"
+                  value={editAccountData.expirationDate}
+                  onChange={(e) =>
+                    setEditAccountData({
+                      ...editAccountData,
+                      expirationDate: formatDDMMYYYY(e.target.value),
+                    })
+                  }
+                  maxLength={10}
+                />
               </div>
             </div>
-          )}
+          </div>
 
-          <DialogFooter className="gap-2">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setEditAccountOpen(false)}
@@ -1147,17 +1091,15 @@ const handleReleaseProfile = async (profileId: string) => {
             >
               Cancelar
             </Button>
+
             <Button
               className="bg-primary text-white"
-              disabled={!editingAccount}
               onClick={async () => {
                 if (!editingAccount) return;
-                if (Number(editAccountData.totalProfiles || 0) < editActiveProfilesCount) return;
 
                 let expISO: string | undefined = undefined;
-                const expText = editAccountData.expirationDate?.trim();
-                if (expText) {
-                  const parsed = parse(expText, 'dd/MM/yyyy', new Date());
+                if (editAccountData.expirationDate.trim()) {
+                  const parsed = parse(editAccountData.expirationDate.trim(), 'dd/MM/yyyy', new Date());
                   if (!isValid(parsed)) {
                     toast.error('Fecha inválida. Usa formato dd/MM/aaaa');
                     return;
@@ -1166,112 +1108,77 @@ const handleReleaseProfile = async (profileId: string) => {
                   expISO = parsed.toISOString();
                 }
 
-                const plan = String(editAccountData.planName ?? '').trim();
+                const ok = await updateAccount(editingAccount.id, {
+                  email: editAccountData.email,
+                  password: editAccountData.password || null,
+                  expirationDate: expISO,
+                  cost: Number(editAccountData.cost || 0),
+                  isRenewable: !!editAccountData.isRenewable,
+                  planName: editAccountData.planName || null,
+                  totalProfiles: Number(editAccountData.totalProfiles || 0),
+                });
 
-                const ok = await updateAccount(
-                  editingAccount.id,
-                  {
-                    totalProfiles: Math.min(Number(editAccountData.totalProfiles || 0), editMaxProfiles),
-                    planName: plan ? plan : null,
-                    email: editAccountData.email,
-                    password: editAccountData.password,
-                    expirationDate: expISO,
-                    isRenewable: editAccountData.isRenewable,
-                    cost: Number(editAccountData.cost || 0),
-                  } as any
-                );
-
-                if (ok) setEditAccountOpen(false);
+                if (ok) {
+                  setEditAccountOpen(false);
+                  setEditingAccount(null);
+                }
               }}
             >
-              Guardar cambios
+              Guardar cuenta
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Mover perfiles */}
+      {/* ✅ Mover perfiles */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent
-          className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
-          aria-describedby={undefined}
-        >
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              Mover perfiles{' '}
-              {moveFromAccount ? `(${getServiceForAccount(moveFromAccount)?.name ?? moveFromAccount.serviceName ?? ''})` : ''}
-            </DialogTitle>
+            <DialogTitle>Mover perfiles</DialogTitle>
           </DialogHeader>
 
-          {!moveFromAccount ? (
-            <p className="text-sm text-muted-foreground">No hay cuenta origen seleccionada.</p>
-          ) : (
+          {moveFromAccount && (
             <div className="space-y-4 py-2">
-              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Cuenta origen</p>
-                <p className="text-sm text-white font-medium">{moveFromAccount.email}</p>
-                <p className="text-xs text-muted-foreground">Activos: {activeProfilesOfFrom.length}</p>
+                <p className="text-sm text-white">{buildAccountDisplayName(moveFromAccount.serviceName, moveFromAccount.planName)}</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Cuenta destino (mismo servicio)</label>
+                <p className="text-xs text-muted-foreground">Cuenta destino</p>
                 <Select value={moveToAccountId} onValueChange={setMoveToAccountId}>
                   <SelectTrigger className="glass-input">
                     <SelectValue placeholder="Selecciona una cuenta destino" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover border-white/10 text-white">
-                    {destinationCandidates.map((a: any) => (
-                      <SelectItem key={a.id} value={a.id} disabled={a.available === 0}>
-                        {a.email} ({a.available} slots)
+                    {destinationCandidates.map((acc: any) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {buildAccountDisplayName(acc.serviceName, acc.planName)} ({acc.available} disponibles)
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => selectFirstN(1)} className="border-white/10 text-white">
+                  1
+                </Button>
+                <Button type="button" variant="outline" onClick={() => selectFirstN(2)} className="border-white/10 text-white">
+                  2
+                </Button>
+                <Button type="button" variant="outline" onClick={() => selectFirstN(3)} className="border-white/10 text-white">
+                  3
+                </Button>
+                <Button type="button" variant="outline" onClick={selectAll} className="border-white/10 text-white">
+                  Todos
+                </Button>
+              </div>
+
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Seleccionar perfiles a mover</label>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
-                    onClick={() => selectFirstN(1)}
-                    disabled={activeProfilesOfFrom.length < 1}
-                  >
-                    1
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
-                    onClick={() => selectFirstN(2)}
-                    disabled={activeProfilesOfFrom.length < 2}
-                  >
-                    2
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 hover:bg-white/5 text-white h-8 text-xs"
-                    onClick={() => selectFirstN(3)}
-                    disabled={activeProfilesOfFrom.length < 3}
-                  >
-                    3
-                  </Button>
-                  <Button
-                    type="button"
-                    className="bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary h-8 text-xs"
-                    onClick={selectAll}
-                    disabled={activeProfilesOfFrom.length === 0}
-                  >
-                    Todos
-                  </Button>
-                </div>
-
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {activeProfilesOfFrom.map((p: any) => (
+                {(moveFromAccount.profiles ?? [])
+                  .filter((p: any) => p.status === 'activo')
+                  .map((p: any) => (
                     <div key={p.id} className="flex items-center justify-between p-2 rounded-md bg-white/5 border border-white/10">
                       <div>
                         <p className="text-sm text-white font-medium">{p.name}</p>
@@ -1289,12 +1196,11 @@ const handleReleaseProfile = async (profileId: string) => {
                       </label>
                     </div>
                   ))}
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Seleccionados: <span className="text-white">{selectedMoveProfileIds.length}</span>
-                </p>
               </div>
+
+              <p className="text-xs text-muted-foreground">
+                Seleccionados: <span className="text-white">{selectedMoveProfileIds.length}</span>
+              </p>
             </div>
           )}
 
@@ -1328,16 +1234,16 @@ const handleReleaseProfile = async (profileId: string) => {
         </DialogContent>
       </Dialog>
 
-    <ConfirmDialog
-  open={deleteConfirm.open}
-  onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
-  title={`¿Eliminar cuenta "${deleteConfirm.name}"?`}
-  description={`Se eliminará la cuenta ${deleteConfirm.email} junto con sus perfiles. Las transacciones (gastos/ganancias) se conservarán para mantener tu contabilidad.`}
-  confirmText="Eliminar Cuenta"
-  cancelText="Cancelar"
-  variant="destructive"
-  onConfirm={handleDeleteAccount}
-/>
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
+        title={`¿Eliminar cuenta "${deleteConfirm.name}"?`}
+        description={`Se eliminará la cuenta ${deleteConfirm.email} junto con sus perfiles. Las transacciones (gastos/ganancias) se conservarán para mantener tu contabilidad.`}
+        confirmText="Eliminar Cuenta"
+        cancelText="Cancelar"
+        variant="destructive"
+        onConfirm={handleDeleteAccount}
+      />
     </div>
   );
 }
