@@ -14,9 +14,7 @@ export interface Service {
   color: string;
   maxProfiles: number;
   isCustom: boolean;
-
   imageUrl?: string | null;
-
   createdAt?: Date;
 }
 
@@ -38,13 +36,9 @@ export interface Profile {
 export interface Account {
   id: string;
   userId: string;
-
   serviceId?: string | null;
   serviceName: ServiceType;
-
-  // ✅ NUEVO: Plan/Nombre por cuenta (editable)
   planName?: string | null;
-
   email: string;
   password?: string | null;
   totalProfiles: number;
@@ -53,16 +47,13 @@ export interface Account {
   isRenewable: boolean;
   cost: number;
   pricePerProfile: number;
-
   status: 'activa' | 'por vencer' | 'vencida';
   createdAt?: Date;
   profiles?: Profile[];
-
   saleType?: 'perfiles' | 'cuenta';
   soldClientId?: string | null;
   soldStartDate?: string | null;
   soldEndDate?: string | null;
-
   isArchived?: boolean;
   archivedAt?: string | null;
 }
@@ -88,7 +79,6 @@ export interface Expense {
   note?: string | null;
   reference?: string | null;
   createdAt?: Date;
-
   isVoided?: boolean;
   voidedAt?: string | null;
   voidReason?: string | null;
@@ -105,7 +95,6 @@ export interface AppSettings {
   telegramBotToken?: string | null;
   telegramChatId?: string | null;
   whatsappPhoneNumber?: string | null;
-
   telegramAccountTemplate?: string | null;
   telegramProfileTemplate?: string | null;
   saleMessageTemplate?: string | null;
@@ -154,12 +143,19 @@ interface StreamingContextType {
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
 
   getAllProfiles: () => Array<Profile & { accountName: string }>;
-  getStats: () => { totalSales: number; totalExpenses: number; netProfit: number; activeAccounts: number; expiringSoon: number };
+  getStats: () => {
+    totalSales: number;
+    totalExpenses: number;
+    netProfit: number;
+    activeAccounts: number;
+    expiringSoon: number;
+  };
 
   getServiceColor: (serviceRef: string) => string;
   getMaxProfilesByService: (serviceRef: ServiceType) => number;
 
   deleteProfile: (accountId: string, profileId: string) => Promise<void>;
+  releaseProfile: (profileId: string) => Promise<void>;
 
   sendTelegramTestNotification: (botToken: string, chatId: string) => Promise<boolean>;
   renewAccountMaster: (accountId: string, renewalDays: number, cost: number) => Promise<boolean>;
@@ -188,10 +184,8 @@ async function fetchAPI(url: string, options?: RequestInit) {
   return res.json();
 }
 
-// ✅ NORMALIZADOR para match por nombre (evita bugs por mayúsculas/minúsculas/espacios)
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
-// ✅ búsqueda tolerante por nombre (exacto + parcial seguro)
 const findServiceByName = (services: any[], name: any) => {
   const n = norm(name);
   if (!n) return null;
@@ -207,7 +201,6 @@ const findServiceByName = (services: any[], name: any) => {
   return candidates.length === 1 ? candidates[0] : null;
 };
 
-// ✅ construye nombre para mostrar: "Spotify Premium 1 mes"
 const buildDisplayName = (serviceName: string, planName?: any) => {
   const plan = String(planName ?? '').trim();
   return plan ? `${serviceName} ${plan}` : serviceName;
@@ -261,7 +254,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     profilesLoading ||
     settingsLoading;
 
-  // ✅ Helpers: resolver servicio por ID y fallback por nombre (tolerante)
   const getServiceForAccount = (acc?: Partial<Account> | null) => {
     if (!acc) return null;
     const byId = acc.serviceId ? services.find((s) => s.id === acc.serviceId) : null;
@@ -270,7 +262,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return null;
   };
 
-  // ✅ ahora devuelve nombre compuesto con planName
   const resolveServiceName = (acc?: Partial<Account> | null) => {
     const svc = getServiceForAccount(acc);
     const base = svc?.name ?? acc?.serviceName ?? 'Servicio';
@@ -282,11 +273,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return svc?.maxProfiles || 7;
   };
 
-  /**
-   * ✅ Backfill automático (1 vez):
-   * - si hay cuentas viejas sin serviceId, intentamos asignar serviceId con match tolerante por nombre
-   * - mandamos SOLO serviceId al backend (para que backend ponga el serviceName correcto)
-   */
   const didBackfillRef = useRef(false);
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -314,9 +300,7 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
             body: JSON.stringify({ serviceId: svc.id }),
           });
           touched++;
-        } catch {
-          // si backend no soporta todavía o algo falla, no bloqueamos
-        }
+        } catch {}
       }
 
       if (touched > 0) {
@@ -398,45 +382,33 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     },
   });
 
-  // ✅ CAMBIO: ya no borra, ahora libera el slot
- const releaseProfileMutation = useMutation({
-  mutationFn: (id: string) =>
-    fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
-  },
-});
+  const releaseProfileMutation = useMutation({
+    mutationFn: (id: string) =>
+      fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+    },
+  });
 
-const releaseProfile = async (profileId: string) => {
-  try {
-    await releaseProfileMutation.mutateAsync(profileId);
-    toast.success('Perfil liberado');
-  } catch {
-    toast.error('Error al liberar perfil');
-  }
-};
+  const createClientMutation = useMutation({
+    mutationFn: (client: any) =>
+      fetchAPI('/api/clients', {
+        method: 'POST',
+        body: JSON.stringify(client),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/clients'] }),
+  });
 
-const createClientMutation = useMutation({
-  mutationFn: (client: any) =>
-    fetchAPI('/api/clients', {
-      method: 'POST',
-      body: JSON.stringify(client),
-    }),
-  onSuccess: () =>
-    queryClient.invalidateQueries({ queryKey: ['/api/clients'] }),
-});
-
-const createExpenseMutation = useMutation({
-  mutationFn: (expense: any) =>
-    fetchAPI('/api/expenses', {
-      method: 'POST',
-      body: JSON.stringify(expense),
-    }),
-  onSuccess: () =>
-    queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
-});
+  const createExpenseMutation = useMutation({
+    mutationFn: (expense: any) =>
+      fetchAPI('/api/expenses', {
+        method: 'POST',
+        body: JSON.stringify(expense),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/expenses'] }),
+  });
 
   const voidExpenseMutation = useMutation({
     mutationFn: ({ expenseId, reason }: { expenseId: string; reason?: string }) =>
@@ -465,11 +437,9 @@ const createExpenseMutation = useMutation({
 
     try {
       await createAccountMutation.mutateAsync(accountToCreate);
-
       await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
-
       toast.success(`Cuenta ${resolveServiceName(newAccount)} agregada exitosamente`);
       return true;
     } catch {
@@ -495,6 +465,15 @@ const createExpenseMutation = useMutation({
       toast.success('Cuenta archivada (tus transacciones se conservan)');
     } catch {
       toast.error('Error al archivar la cuenta');
+    }
+  };
+
+  const releaseProfile = async (profileId: string) => {
+    try {
+      await releaseProfileMutation.mutateAsync(profileId);
+      toast.success('Perfil liberado');
+    } catch {
+      toast.error('Error al liberar perfil');
     }
   };
 
@@ -555,14 +534,14 @@ const createExpenseMutation = useMutation({
     }
   };
 
-const deleteService = async (id: string) => {
-  try {
-    await deleteServiceMutation.mutateAsync(id);
-    toast.success('Servicio eliminado');
-  } catch {
-    toast.error('Error al eliminar el servicio');
-  }
-};
+  const deleteService = async (id: string) => {
+    try {
+      await deleteServiceMutation.mutateAsync(id);
+      toast.success('Servicio eliminado');
+    } catch {
+      toast.error('Error al eliminar el servicio');
+    }
+  };
 
   const sellProfile = async (
     accountId: string,
@@ -612,12 +591,10 @@ const deleteService = async (id: string) => {
   ) => {
     try {
       await fetchAPI(`/api/accounts/${accountId}/sell`, { method: 'POST', body: JSON.stringify(data) });
-
       await queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
-
       toast.success('Cuenta completa vendida exitosamente');
       return true;
     } catch (e: any) {
@@ -658,7 +635,9 @@ const deleteService = async (id: string) => {
     }
 
     try {
-      const newEndDate = addDays(new Date(profile.endDate || new Date()), 30).toISOString();
+      const baseDate = profile.endDate ? new Date(profile.endDate) : new Date();
+      const newEndDate = addDays(baseDate, 30).toISOString();
+
       await updateProfileMutation.mutateAsync({
         id: profileId,
         updates: { endDate: newEndDate, price: renewalPrice },
@@ -754,7 +733,6 @@ const deleteService = async (id: string) => {
     return { totalSales, totalExpenses, netProfit, activeAccounts, expiringSoon };
   };
 
-  // ✅ acepta serviceId o serviceName (case-insensitive)
   const getServiceColor = (serviceRef: string) => {
     const byId = services.find((s) => s.id === serviceRef);
     if (byId?.color) return byId.color;
@@ -763,7 +741,6 @@ const deleteService = async (id: string) => {
     return byName?.color || '#6366f1';
   };
 
-  // ✅ acepta serviceId o serviceName (case-insensitive)
   const getMaxProfilesByService = (serviceRef: ServiceType) => {
     const byId = services.find((s) => s.id === serviceRef);
     if (byId?.maxProfiles) return byId.maxProfiles;
@@ -772,7 +749,6 @@ const deleteService = async (id: string) => {
     return byName?.maxProfiles || 7;
   };
 
-  // ✅ CAMBIO: esta función ahora libera el perfil, no lo elimina físicamente
   const deleteProfile = async (accountId: string, profileId: string) => {
     try {
       await releaseProfileMutation.mutateAsync(profileId);
@@ -841,7 +817,9 @@ const deleteService = async (id: string) => {
     }
 
     try {
-      const newEndDate = addDays(new Date(profile.endDate || new Date()), renewalDays).toISOString();
+      const baseDate = profile.endDate ? new Date(profile.endDate) : new Date();
+      const newEndDate = addDays(baseDate, renewalDays).toISOString();
+
       await updateProfileMutation.mutateAsync({
         id: profileId,
         updates: { endDate: newEndDate },
@@ -956,7 +934,7 @@ const deleteService = async (id: string) => {
         getServiceColor,
         getMaxProfilesByService,
         deleteProfile,
-	releaseProfile,
+        releaseProfile,
         sendTelegramTestNotification,
         renewAccountMaster,
         renewProfileSale,
