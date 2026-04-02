@@ -21,14 +21,17 @@ type ProfileLike = {
   clientId?: string | null;
   phone?: string | null;
   price?: number | null;
+
+  // ✅ vencimiento del perfil
   endDate?: string | null;
+
   createdAt?: any;
   __placeholder?: boolean;
 };
 
 // ✅ auto-formato dd/MM/yyyy mientras escribe (solo números + inserta /)
 const formatDDMMYYYY = (input: string) => {
-  const digits = (input || '').replace(/\D/g, '').slice(0, 8);
+  const digits = (input || '').replace(/\D/g, '').slice(0, 8); // ddmmyyyy
   const dd = digits.slice(0, 2);
   const mm = digits.slice(2, 4);
   const yyyy = digits.slice(4, 8);
@@ -38,7 +41,7 @@ const formatDDMMYYYY = (input: string) => {
   return `${dd}/${mm}/${yyyy}`;
 };
 
-// ✅ normaliza strings
+// ✅ normaliza strings (evita bugs por mayúsculas/minúsculas/espacios)
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 
 // ✅ busca servicio por nombre con fallback tolerante
@@ -46,9 +49,11 @@ const findServiceByName = (services: any[], name: any) => {
   const n = norm(name);
   if (!n) return null;
 
+  // 1) match exacto normalizado
   const exact = services.find((s: any) => norm(s?.name) === n);
   if (exact) return exact;
 
+  // 2) match parcial
   const partial = services.find((s: any) => {
     const sn = norm(s?.name);
     if (!sn) return false;
@@ -58,7 +63,7 @@ const findServiceByName = (services: any[], name: any) => {
   return partial ?? null;
 };
 
-// ✅ construye título visible: "Spotify Premium 1 mes"
+// ✅ construye el título que se muestra en la tarjeta: "Spotify Premium 1 mes"
 const buildAccountDisplayName = (serviceName: string, planName?: any) => {
   const plan = String(planName ?? '').trim();
   return plan ? `${serviceName} ${plan}` : serviceName;
@@ -68,6 +73,7 @@ export default function Accounts() {
   const {
     accounts,
     addAccount,
+    // clients, // ❌ ya no lo usamos aquí
     updateProfile,
     deleteAccount,
     updateAccount,
@@ -83,15 +89,17 @@ export default function Accounts() {
   const servicesSafe = services ?? [];
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterService, setFilterService] = useState<string>('all');
+  const [filterService, setFilterService] = useState<string>('all'); // guarda serviceId
   const [isAddOpen, setIsAddOpen] = useState(false);
 
+  // mostrar/ocultar password
   const [showNewAccountPassword, setShowNewAccountPassword] = useState(false);
   const [showEditAccountPassword, setShowEditAccountPassword] = useState(false);
   const [showPasswordByAccount, setShowPasswordByAccount] = useState<Record<string, boolean>>({});
 
   const [editingProfile, setEditingProfile] = useState<{ accountId: string; profile: ProfileLike } | null>(null);
 
+  // ✅ editData (SIN cliente)
   const [editData, setEditData] = useState({
     name: '',
     pin: '',
@@ -100,6 +108,7 @@ export default function Accounts() {
     endDate: '',
   });
 
+  // ver/ocultar PIN dentro del modal de editar perfil
   const [showEditProfilePin, setShowEditProfilePin] = useState(false);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string; email: string }>({
@@ -109,6 +118,7 @@ export default function Accounts() {
     email: '',
   });
 
+  // ✅ serviceId + planName + expirationDate (dd/MM/yyyy)
   const [newAccount, setNewAccount] = useState<
     Partial<Account> & { serviceId?: string; expirationDate?: string; planName?: string }
   >({
@@ -120,32 +130,38 @@ export default function Accounts() {
     expirationDate: '',
   });
 
+  // Editar cuenta maestra
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any>(null);
   const [editAccountData, setEditAccountData] = useState({
     email: '',
     password: '',
-    expirationDate: '',
+    expirationDate: '', // dd/MM/yyyy
     cost: 0,
     isRenewable: true,
     planName: '',
     totalProfiles: 5,
   });
 
+  // Mover perfiles
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveFromAccount, setMoveFromAccount] = useState<any>(null);
   const [moveToAccountId, setMoveToAccountId] = useState<string>('');
   const [selectedMoveProfileIds, setSelectedMoveProfileIds] = useState<string[]>([]);
 
+  // ✅ refs para deep-link (Dashboard -> Accounts)
   const accountRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const didFocusRef = useRef<string>('');
 
+  // ✅ resolver servicio por account (por ID, fallback por nombre robusto)
   const getServiceForAccount = (acc: any) => {
     if (!acc) return null;
 
+    // 1) por ID
     const byId = acc.serviceId ? servicesSafe.find((s: any) => s.id === acc.serviceId) : null;
     if (byId) return byId;
 
+    // 2) por nombre
     if (acc.serviceName) return findServiceByName(servicesSafe, acc.serviceName);
 
     return null;
@@ -160,6 +176,7 @@ export default function Accounts() {
     return null;
   };
 
+  // ✅ cuando abres modal y no hay serviceId, asigna uno default
   useEffect(() => {
     if (!isAddOpen) return;
     if (servicesSafe.length === 0) return;
@@ -178,6 +195,7 @@ export default function Accounts() {
     });
   }, [isAddOpen, servicesSafe]);
 
+  // ✅ Deep link: /accounts?accountId=...&profileId=...
   useEffect(() => {
     if (!accountsSafe.length) return;
 
@@ -195,11 +213,13 @@ export default function Accounts() {
     const acc = accountsSafe.find((a: any) => a.id === accountId);
     if (!acc) return;
 
+    // scroll a la cuenta
     const el = accountRefs.current[accountId];
     if (el?.scrollIntoView) {
       setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
 
+    // abrir perfil
     if (profileId) {
       const p = (acc.profiles ?? []).find((x: any) => x.id === profileId);
       if (p && p.status === 'activo') {
@@ -221,6 +241,7 @@ export default function Accounts() {
     return accountsSafe.filter((acc: any) => {
       const service = getServiceForAccount(acc);
       const serviceBaseName = service?.name ?? acc.serviceName ?? '';
+
       const displayName = buildAccountDisplayName(serviceBaseName, acc.planName);
 
       const matchesSearch =
@@ -249,9 +270,9 @@ export default function Accounts() {
     if (!serviceId || !serviceName) return;
     if (!newAccount.email || newAccount.cost === undefined || newAccount.cost === null) return;
 
+    // dd/MM/yyyy -> ISO
     let expISO: string;
     const expText = newAccount.expirationDate?.trim();
-
     if (expText) {
       const parsed = parse(expText, 'dd/MM/yyyy', new Date());
       if (!isValid(parsed)) {
@@ -300,19 +321,19 @@ export default function Accounts() {
     }
   };
 
+  // mover helpers
   const activeProfilesOfFrom: ProfileLike[] = (moveFromAccount?.profiles ?? []).filter((p: any) => p.status === 'activo');
 
   const selectFirstN = (n: number) => {
     const ids = activeProfilesOfFrom.slice(0, n).map((p: any) => p.id);
     setSelectedMoveProfileIds(ids);
   };
-
   const selectAll = () => setSelectedMoveProfileIds(activeProfilesOfFrom.map((p: any) => p.id));
-
   const toggleSelect = (id: string) => {
     setSelectedMoveProfileIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
+  // ✅ candidates por serviceId si existe, fallback por serviceName
   const destinationCandidates = (accountsSafe ?? [])
     .filter((a: any) => {
       if (!moveFromAccount) return false;
@@ -327,6 +348,7 @@ export default function Accounts() {
       available: (a.profiles ?? []).filter((p: any) => p.status === 'disponible').length,
     }));
 
+  // ✅ mandar a ventas con serviceId
   const goSellFromSlot = (serviceId: string, serviceName: string, accountId: string, profile?: ProfileLike) => {
     const params = new URLSearchParams();
     params.set('mode', 'perfil');
@@ -341,6 +363,7 @@ export default function Accounts() {
     navigate(`/sales?${params.toString()}`);
   };
 
+  // helper imagen del servicio
   const getServiceImage = (svc: any): string => {
     if (!svc) return '';
     return svc.imageUrl || (svc as any).iconUrl || (svc as any).image || (svc as any).logoUrl || '';
@@ -350,6 +373,7 @@ export default function Accounts() {
   const maxProfilesLabel =
     getMaxProfilesByService?.((newSvc?.id || newSvc?.name || newAccount.serviceName || 'Netflix') as any) ?? 5;
 
+  // ✅ max para EDIT (depende del servicio de la cuenta)
   const editSvc = getServiceForAccount(editingAccount);
   const editMaxProfiles =
     getMaxProfilesByService?.(
@@ -614,6 +638,7 @@ export default function Accounts() {
 
             const realProfilesRaw: ProfileLike[] = (account.profiles ?? []) as ProfileLike[];
 
+            // ✅ orden estable si existe createdAt
             const realProfiles: ProfileLike[] = [...realProfilesRaw].sort((a: any, b: any) => {
               const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
               const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -737,9 +762,7 @@ export default function Accounts() {
                               setEditAccountData({
                                 email: account.email || '',
                                 password: account.password || '',
-                                expirationDate: account.expirationDate
-                                  ? format(new Date(account.expirationDate), 'dd/MM/yyyy')
-                                  : '',
+                                expirationDate: account.expirationDate ? format(new Date(account.expirationDate), 'dd/MM/yyyy') : '',
                                 cost: Number(account.cost || 0),
                                 isRenewable: !!account.isRenewable,
                                 planName: String(account.planName ?? ''),
@@ -815,15 +838,9 @@ export default function Accounts() {
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             <User
-                              className={`h-3 w-3 shrink-0 ${
-                                profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
-                              }`}
+                              className={`h-3 w-3 shrink-0 ${profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'}`}
                             />
-                            <span
-                              className={`truncate ${
-                                profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
-                              }`}
-                            >
+                            <span className={`truncate ${profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'}`}>
                               {profile.name}
                             </span>
                           </div>
@@ -850,6 +867,7 @@ export default function Accounts() {
         </div>
       )}
 
+      {/* ✅ Editar perfil (SIN Cliente) */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
           <DialogContent
@@ -904,6 +922,7 @@ export default function Accounts() {
                 </div>
               </div>
 
+              {/* ✅ vencimiento del perfil */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Vence (dd/MM/aaaa)</label>
                 <Input
@@ -939,9 +958,9 @@ export default function Accounts() {
               </Button>
               <Button
                 onClick={() => {
+                  // ✅ dd/MM/yyyy -> ISO o null
                   let endISO: string | null = null;
                   const txt = (editData.endDate || '').trim();
-
                   if (txt) {
                     const parsed = parse(txt, 'dd/MM/yyyy', new Date());
                     if (!isValid(parsed)) {
@@ -958,6 +977,7 @@ export default function Accounts() {
                     phone: editData.phone?.trim() ? editData.phone.trim() : null,
                     price: editData.price || undefined,
                     endDate: endISO,
+                    // ❌ clientId intencionalmente removido
                   } as any);
 
                   setEditingProfile(null);
@@ -971,6 +991,7 @@ export default function Accounts() {
         </Dialog>
       )}
 
+      {/* Editar cuenta maestra (sin cambios relevantes) */}
       <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
         <DialogContent
           className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"
@@ -1107,7 +1128,6 @@ export default function Accounts() {
 
                 let expISO: string | undefined = undefined;
                 const expText = editAccountData.expirationDate?.trim();
-
                 if (expText) {
                   const parsed = parse(expText, 'dd/MM/yyyy', new Date());
                   if (!isValid(parsed)) {
@@ -1142,6 +1162,7 @@ export default function Accounts() {
         </DialogContent>
       </Dialog>
 
+      {/* Mover perfiles */}
       <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
         <DialogContent
           className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto"

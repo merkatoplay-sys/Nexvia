@@ -535,6 +535,15 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+const deleteService = async (id: string) => {
+  try {
+    await deleteServiceMutation.mutateAsync(id);
+    toast.success('Servicio eliminado');
+  } catch {
+    toast.error('Error al eliminar el servicio');
+  }
+};
+
   const sellProfile = async (
     accountId: string,
     profileId: string,
