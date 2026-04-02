@@ -401,6 +401,14 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
   // ✅ CAMBIO: ya no borra, ahora libera el slot
   const releaseProfileMutation = useMutation({
     mutationFn: (id: string) => fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
+const releaseProfile = async (profileId: string) => {
+  try {
+    await releaseProfileMutation.mutateAsync(profileId);
+    toast.success('Perfil liberado');
+  } catch {
+    toast.error('Error al liberar perfil');
+  }
+};
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
@@ -936,6 +944,7 @@ const deleteService = async (id: string) => {
         getServiceColor,
         getMaxProfilesByService,
         deleteProfile,
+	releaseProfile,
         sendTelegramTestNotification,
         renewAccountMaster,
         renewProfileSale,

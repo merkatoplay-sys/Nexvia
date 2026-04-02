@@ -14,27 +14,14 @@ import { toast } from 'sonner';
 const money = (v: any) =>
   `$${Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// ✅ igual que en context: "Spotify Premium 1 mes"
 const buildDisplayName = (serviceName: string, planName?: any) => {
   const plan = String(planName ?? '').trim();
   return plan ? `${serviceName} ${plan}` : serviceName;
 };
 
 type RenewalTarget =
-  | {
-      open: false;
-      type: null;
-      accountId: '';
-      profileId: '';
-      title: '';
-    }
-  | {
-      open: true;
-      type: 'cuenta' | 'perfil';
-      accountId: string;
-      profileId: string;
-      title: string;
-    };
+  | { open: false; type: null; accountId: ''; profileId: ''; title: '' }
+  | { open: true; type: 'cuenta' | 'perfil'; accountId: string; profileId: string; title: string };
 
 export default function Dashboard() {
   const {
@@ -44,7 +31,7 @@ export default function Dashboard() {
     getServiceColor,
     renewAccountMaster,
     renewProfileSale,
-    deleteProfile,
+    releaseProfile,
   } = useStreaming();
 
   const [, navigate] = useLocation();
@@ -55,7 +42,6 @@ export default function Dashboard() {
 
   const [expiringOpen, setExpiringOpen] = useState(false);
 
-  // ✅ modal renovar
   const [renewalTarget, setRenewalTarget] = useState<RenewalTarget>({
     open: false,
     type: null,
@@ -63,6 +49,7 @@ export default function Dashboard() {
     profileId: '',
     title: '',
   });
+
   const [renewalDays, setRenewalDays] = useState<number>(30);
   const [renewalCost, setRenewalCost] = useState<number>(0);
   const [isSubmittingRenewal, setIsSubmittingRenewal] = useState(false);
@@ -91,11 +78,7 @@ export default function Dashboard() {
     return svc?.imageUrl || '';
   };
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.08 } },
-  };
-
+  const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.08 } } };
   const item = { hidden: { y: 14, opacity: 0 }, show: { y: 0, opacity: 1 } };
 
   const expiringSoonAccounts = useMemo(() => {
@@ -123,7 +106,6 @@ export default function Dashboard() {
     );
   }, [accountsSafe]);
 
-  // ✅ lista unificada y ordenada por días restantes
   const expiringItems = useMemo(() => {
     const accItems = expiringSoonAccounts.map((acc: any) => ({
       type: 'cuenta' as const,
@@ -149,6 +131,33 @@ export default function Dashboard() {
 
   const expiringTotal = expiringSoonAccounts.length + expiringSoonProfiles.length;
 
+  const handleQuickRenew = async (it: any) => {
+    try {
+      let ok = false;
+
+      if (it.type === 'cuenta') {
+        ok = await renewAccountMaster(it.accountId, 30, Number(it.suggestedCost || 0));
+      } else {
+        ok = await renewProfileSale(it.accountId, it.profileId, 30, Number(it.suggestedCost || 0));
+      }
+
+      if (ok) {
+        toast.success('Renovado 30 días');
+        setExpiringOpen(false);
+      }
+    } catch {
+      toast.error('Error al renovar');
+    }
+  };
+
+  const handleReleaseProfile = async (item: any) => {
+    if (item.type !== 'perfil') return;
+    if (!confirm('¿Liberar perfil?')) return;
+    await releaseProfile(item.profileId);
+    toast.success('Perfil liberado');
+    setExpiringOpen(false);
+  };
+
   const openRenewDialog = (item: any) => {
     setRenewalDays(30);
     setRenewalCost(Number(item.suggestedCost || 0));
@@ -162,349 +171,97 @@ export default function Dashboard() {
   };
 
   const closeRenewDialog = () => {
-    setRenewalTarget({
-      open: false,
-      type: null,
-      accountId: '',
-      profileId: '',
-      title: '',
-    });
-    setRenewalDays(30);
-    setRenewalCost(0);
-    setIsSubmittingRenewal(false);
+    setRenewalTarget({ open: false, type: null, accountId: '', profileId: '', title: '' });
   };
 
   const handleConfirmRenewal = async () => {
     if (!renewalTarget.open || !renewalTarget.type) return;
 
-    if (renewalDays <= 0) {
-      toast.error('Ingresa días válidos');
-      return;
+    let ok = false;
+
+    if (renewalTarget.type === 'cuenta') {
+      ok = await renewAccountMaster(renewalTarget.accountId, renewalDays, renewalCost);
+    } else {
+      ok = await renewProfileSale(
+        renewalTarget.accountId,
+        renewalTarget.profileId,
+        renewalDays,
+        renewalCost
+      );
     }
 
-    if (renewalCost <= 0) {
-      toast.error('Ingresa un monto válido');
-      return;
+    if (ok) {
+      toast.success('Renovado');
+      closeRenewDialog();
+      setExpiringOpen(false);
     }
-
-    setIsSubmittingRenewal(true);
-
-    try {
-      let ok = false;
-
-      if (renewalTarget.type === 'cuenta') {
-        ok = await renewAccountMaster(renewalTarget.accountId, renewalDays, renewalCost);
-      } else {
-        ok = await renewProfileSale(
-          renewalTarget.accountId,
-          renewalTarget.profileId,
-          renewalDays,
-          renewalCost
-        );
-      }
-
-      if (ok) {
-        closeRenewDialog();
-        setExpiringOpen(false);
-      }
-    } finally {
-      setIsSubmittingRenewal(false);
-    }
-  };
-
-  const handleReleaseProfile = async (item: any) => {
-    if (item.type !== 'perfil' || !item.profileId) return;
-
-    const ok = window.confirm(`¿Liberar el perfil "${item.title}"?\n\nEl slot quedará disponible para venderlo de nuevo.`);
-    if (!ok) return;
-
-    await deleteProfile(item.accountId, item.profileId);
-    setExpiringOpen(false);
   };
 
   return (
     <>
       <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-display font-bold text-white mb-1">Dashboard</h1>
-            <p className="text-muted-foreground text-sm">Resumen de tu negocio.</p>
-          </div>
-          <Button
-            onClick={() => navigate('/sales')}
-            className="bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_-5px_rgba(124,58,237,0.5)]"
-          >
-            <ShoppingCart className="mr-2 h-4 w-4" /> Hacer Venta
+        
+        <div className="flex justify-between">
+          <h1 className="text-2xl text-white font-bold">Dashboard</h1>
+          <Button onClick={() => navigate('/sales')}>
+            <ShoppingCart className="mr-2 h-4 w-4" /> Venta
           </Button>
         </div>
 
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
-          <motion.div variants={item}>
-            <Card className="glass-card hover:bg-card/80 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground">Ingresos</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-lg font-bold font-display text-white leading-tight">{money(stats.totalSales)}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Por perfiles</p>
-              </CardContent>
-            </Card>
-          </motion.div>
+        <Card onClick={() => expiringTotal > 0 && setExpiringOpen(true)} className="cursor-pointer">
+          <CardHeader>
+            <CardTitle>Por vencer</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl text-orange-400">{expiringTotal}</div>
+          </CardContent>
+        </Card>
 
-          <motion.div variants={item}>
-            <Card className="glass-card hover:bg-card/80 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground">Ganancia</CardTitle>
-                <TrendingUp className="h-4 w-4 text-emerald-500" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-lg font-bold font-display text-emerald-500 neon-text leading-tight">
-                  {money(stats.netProfit)}
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {stats.totalSales > 0 ? Math.round((stats.netProfit / stats.totalSales) * 100) : 0}% margen
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div variants={item}>
-            <Card className="glass-card hover:bg-card/80 transition-colors">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground">Cuentas</CardTitle>
-                <Users className="h-4 w-4 text-blue-400" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-lg font-bold font-display text-white leading-tight">{stats.activeAccounts}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Activas</p>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div variants={item}>
-            <Card
-              className="glass-card hover:bg-card/80 transition-colors border-orange-500/20 cursor-pointer"
-              onClick={() => expiringTotal > 0 && setExpiringOpen(true)}
-              title={expiringTotal > 0 ? 'Ver detalles' : 'No hay próximos vencimientos'}
-              role="button"
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                <CardTitle className="text-[11px] font-medium text-muted-foreground">Por vencer</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-orange-500" />
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="text-lg font-bold font-display text-orange-500 leading-tight">{expiringTotal}</div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Próx 3 días</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {expiringSoonAccounts.length} cuentas • {expiringSoonProfiles.length} perfiles
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
-
-        <motion.div variants={item}>
-          <Card className="glass-card">
-            <CardHeader className="py-4">
-              <CardTitle className="text-white text-base">Cuentas Recientes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {accountsSafe.slice(0, 5).map((acc: any) => {
-                  const serviceName = getServiceNameForAccount(acc);
-                  const serviceColor = getServiceColorForAccount(acc);
-                  const serviceImage = getServiceImageForAccount(acc);
-
-                  return (
-                    <div
-                      key={acc.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 cursor-pointer hover:bg-white/10 transition-colors"
-                      onClick={() => navigate(`/account/${acc.id}`)}
-                    >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <div
-                          className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center font-bold text-white shrink-0"
-                          style={{ backgroundColor: serviceColor }}
-                        >
-                          {serviceImage ? (
-                            <img
-                              src={serviceImage}
-                              alt={serviceName}
-                              className="w-full h-full object-cover"
-                              onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
-                            />
-                          ) : (
-                            serviceName.substring(0, 1)
-                          )}
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{serviceName}</p>
-                          <p className="text-xs text-muted-foreground truncate">{acc.email}</p>
-                        </div>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-medium text-white">
-                          {(acc.profiles ?? []).filter((p: any) => p.status === 'activo').length} / {acc.totalProfiles}
-                        </p>
-                        <Badge
-                          className={
-                            acc.status === 'activa'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : 'bg-orange-500/20 text-orange-400'
-                          }
-                        >
-                          {acc.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
       </motion.div>
 
-      {/* ✅ Modal de “Por vencer” */}
+      {/* MODAL */}
       <Dialog open={expiringOpen} onOpenChange={setExpiringOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto max-w-2xl">
+        <DialogContent className="text-white">
           <DialogHeader>
-            <DialogTitle>Próximos vencimientos (3 días)</DialogTitle>
+            <DialogTitle>Por vencer</DialogTitle>
           </DialogHeader>
 
-          {expiringItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hay cuentas/perfiles por vencer.</p>
-          ) : (
-            <div className="space-y-2 py-2">
-              {expiringItems.map((it: any) => (
-                <div
-                  key={`${it.type}-${it.accountId}-${it.profileId ?? ''}`}
-                  className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge className={it.type === 'cuenta' ? 'bg-blue-500/20 text-blue-300' : 'bg-violet-500/20 text-violet-300'}>
-                        {it.type === 'cuenta' ? 'Cuenta' : 'Perfil'}
-                      </Badge>
+          <div className="space-y-3">
+            {expiringItems.map((it: any) => (
+              <div key={it.profileId || it.accountId} className="p-3 bg-white/5 rounded">
+                
+                <p className="text-sm">{it.title}</p>
+                <p className="text-xs text-muted-foreground">{it.subtitle}</p>
 
-                      <span className="text-xs text-orange-300 font-medium">{it.daysLeft} días</span>
-                    </div>
+                <div className="flex gap-2 mt-2">
+                  <Button size="sm" onClick={() => handleQuickRenew(it)}>30d</Button>
+                  <Button size="sm" variant="outline" onClick={() => openRenewDialog(it)}>+</Button>
 
-                    <p className="text-sm text-white font-medium truncate mt-1">{it.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{it.subtitle}</p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => openRenewDialog(it)}
-                    >
-                      Renovar
+                  {it.type === 'perfil' && (
+                    <Button size="sm" variant="destructive" onClick={() => handleReleaseProfile(it)}>
+                      Liberar
                     </Button>
-
-                    {it.type === 'perfil' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                        onClick={() => handleReleaseProfile(it)}
-                      >
-                        Liberar
-                      </Button>
-                    )}
-
-                    <Button
-                      size="sm"
-                      className="bg-primary text-white"
-                      onClick={() => {
-                        const params = new URLSearchParams();
-                        params.set('accountId', it.accountId);
-                        if (it.type === 'perfil' && it.profileId) params.set('profileId', it.profileId);
-
-                        setExpiringOpen(false);
-                        navigate(`/accounts?${params.toString()}`);
-                      }}
-                    >
-                      Ver
-                    </Button>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setExpiringOpen(false)}
-              className="border-white/10 hover:bg-white/5 text-white"
-            >
-              Cerrar
-            </Button>
-          </DialogFooter>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Modal renovar */}
-      <Dialog open={renewalTarget.open} onOpenChange={(open) => !open && closeRenewDialog()}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg">
+      {/* MODAL PERSONALIZADO */}
+      <Dialog open={renewalTarget.open} onOpenChange={closeRenewDialog}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {renewalTarget.type === 'cuenta' ? 'Renovar cuenta' : 'Renovar perfil'}
-            </DialogTitle>
+            <DialogTitle>Renovar</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
-              <p className="text-xs text-muted-foreground">Elemento seleccionado</p>
-              <p className="text-sm text-white font-medium">{renewalTarget.title}</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Días</label>
-              <Input
-                type="number"
-                min="1"
-                className="glass-input"
-                value={renewalDays}
-                onChange={(e) => setRenewalDays(parseInt(e.target.value || '0') || 0)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">
-                {renewalTarget.type === 'cuenta' ? 'Costo' : 'Precio'}
-              </label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                className="glass-input"
-                value={renewalCost}
-                onChange={(e) => setRenewalCost(parseFloat(e.target.value || '0') || 0)}
-              />
-            </div>
-          </div>
+          <Input type="number" value={renewalDays} onChange={(e) => setRenewalDays(+e.target.value)} />
+          <Input type="number" value={renewalCost} onChange={(e) => setRenewalCost(+e.target.value)} />
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={closeRenewDialog}
-              className="border-white/10 hover:bg-white/5 text-white"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleConfirmRenewal}
-              className="bg-primary text-white"
-              disabled={isSubmittingRenewal}
-            >
-              Confirmar renovación
-            </Button>
+            <Button onClick={handleConfirmRenewal}>Confirmar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

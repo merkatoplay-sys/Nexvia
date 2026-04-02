@@ -377,18 +377,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateProfile(id: string, userId: string, updates: Partial<Profile>): Promise<Profile> {
-    const payload: any = { ...updates };
-    if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
-    if ("endDate" in payload) payload.endDate = toDateOrNull(payload.endDate);
+  const payload: any = { ...updates };
 
-    const [updated] = await db
-      .update(profiles)
-      .set(payload)
-      .where(and(eq(profiles.id, id), eq(profiles.userId, userId)))
-      .returning();
+  if ("startDate" in payload) payload.startDate = toDateOrNull(payload.startDate);
+  if ("endDate" in payload) payload.endDate = toDateOrNull(payload.endDate);
 
-    return updated;
+  const [updated] = await db
+    .update(profiles)
+    .set(payload)
+    .where(and(eq(profiles.id, id), eq(profiles.userId, userId)))
+    .returning();
+
+  // 🔴 IMPORTANTE: evita falsos positivos (tu bug)
+  if (!updated) {
+    throw new Error("Perfil no encontrado en base de datos");
   }
+
+  return updated;
+}
 
   async deleteProfile(id: string, userId: string): Promise<void> {
     await db.delete(profiles).where(and(eq(profiles.id, id), eq(profiles.userId, userId)));
