@@ -814,107 +814,87 @@ const handleReleaseProfile = async (profileId: string) => {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Perfiles</h4>
+<div className="space-y-2">
+  <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+    Perfiles
+  </h4>
 
-                     {displayProfiles.map((profile) => (
-  <div
-    key={profile.id}
-    className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm cursor-pointer"
-    onClick={(e) => {
-      e.preventDefault?.();
-      e.stopPropagation?.();
+  {displayProfiles.map((profile) => {
+    return (
+      <div
+        key={profile.id}
+        className="flex items-center justify-between p-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm cursor-pointer"
+        onClick={(e) => {
+          e.preventDefault?.();
+          e.stopPropagation?.();
 
-      if (profile.status === 'activo') {
-        setEditingProfile({ accountId: account.id, profile });
-        setShowEditProfilePin(false);
+          if (profile.status === 'activo') {
+            setEditingProfile({ accountId: account.id, profile });
+            setShowEditProfilePin(false);
 
-        setEditData({
-          name: profile.name ?? '',
-          pin: profile.pin ?? '',
-          phone: profile.phone ?? '',
-          price: profile.price ?? 0,
-          endDate: profile.endDate ? format(new Date(profile.endDate), 'dd/MM/yyyy') : '',
-        });
-        return;
-      }
+            setEditData({
+              name: profile.name ?? '',
+              pin: profile.pin ?? '',
+              phone: profile.phone ?? '',
+              price: profile.price ?? 0,
+              endDate: profile.endDate ? format(new Date(profile.endDate), 'dd/MM/yyyy') : '',
+            });
+            return;
+          }
 
-      if (profile.status === 'disponible') {
-        const finalServiceId = account.serviceId || svc?.id || '';
-        goSellFromSlot(finalServiceId, serviceBaseName, account.id, profile);
-      }
-    }}
-    title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
-  >
-    <div className="flex items-center gap-2 min-w-0">
-      <User
-        className={`h-3 w-3 shrink-0 ${
-          profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
-        }`}
-      />
-      <span
-        className={`truncate ${
-          profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
-        }`}
+          if (profile.status === 'disponible') {
+            const finalServiceId = account.serviceId || svc?.id || '';
+            goSellFromSlot(finalServiceId, serviceBaseName, account.id, profile);
+          }
+        }}
+        title={profile.status === 'activo' ? 'Editar' : profile.status === 'disponible' ? 'Vender' : ''}
       >
-        {profile.name}
-      </span>
-    </div>
-
-    {/* 🔥 LADO DERECHO (estado + botón) */}
-    <div className="flex items-center gap-2">
-      {profile.status === 'activo' ? (
-        <>
-          <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
-            Activo
-          </Badge>
-
-          {/* 🔥 BOTÓN LIBERAR */}
-          <Button
-            size="sm"
-            variant="destructive"
-            className="h-6 px-2 text-[10px]"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleReleaseProfile(profile.id);
-            }}
+        <div className="flex items-center gap-2 min-w-0">
+          <User
+            className={`h-3 w-3 shrink-0 ${
+              profile.status === 'activo' ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          />
+          <span
+            className={`truncate ${
+              profile.status === 'disponible' ? 'text-muted-foreground italic' : 'text-white'
+            }`}
           >
-            Liberar
-          </Button>
-        </>
-      ) : profile.status === 'vencido' ? (
-        <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
-          Vencido
-        </Badge>
-      ) : (
-        <span className="text-[10px] text-muted-foreground">Disponible</span>
-      )}
-    </div>
-  </div>
-))}
-
-                          {profile.status === 'activo' ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
-                              Activo
-                            </Badge>
-                          ) : profile.status === 'vencido' ? (
-                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
-                              Vencido
-                            </Badge>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">Disponible</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
+            {profile.name}
+          </span>
         </div>
-      )}
 
+        <div className="flex items-center gap-2">
+          {profile.status === 'activo' ? (
+            <>
+              <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 text-[10px] h-5">
+                Activo
+              </Badge>
+
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-6 px-2 text-[10px]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleReleaseProfile(profile.id);
+                }}
+              >
+                Liberar
+              </Button>
+            </>
+          ) : profile.status === 'vencido' ? (
+            <Badge className="bg-red-500/15 text-red-300 border border-red-500/25 text-[10px] h-5">
+              Vencido
+            </Badge>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">Disponible</span>
+          )}
+        </div>
+      </div>
+    );
+  })}
+</div>
       {/* ✅ Editar perfil (SIN Cliente) */}
       {editingProfile && (
         <Dialog open={!!editingProfile} onOpenChange={(open) => !open && setEditingProfile(null)}>
