@@ -1328,16 +1328,16 @@ const handleReleaseProfile = async (profileId: string) => {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={deleteConfirm.open}
-        onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
-        title={`¿Eliminar cuenta "${deleteConfirm.name}"?`}
-        description={`Se eliminará la cuenta ${deleteConfirm.email} junto con sus perfiles. Las transacciones (gastos/ganancias) se conservarán para mantener tu contabilidad.`}
-        confirmText="Eliminar Cuenta"
-        cancelText="Cancelar"
-        variant="destructive"
-        onConfirm={handleDeleteAccount}
-      />
+    <ConfirmDialog
+  open={deleteConfirm.open}
+  onOpenChange={(open) => setDeleteConfirm({ ...deleteConfirm, open })}
+  title={`¿Eliminar cuenta "${deleteConfirm.name}"?`}
+  description={`Se eliminará la cuenta ${deleteConfirm.email} junto con sus perfiles. Las transacciones (gastos/ganancias) se conservarán para mantener tu contabilidad.`}
+  confirmText="Eliminar Cuenta"
+  cancelText="Cancelar"
+  variant="destructive"
+  onConfirm={handleDeleteAccount}
+/>
     </div>
   );
 }
