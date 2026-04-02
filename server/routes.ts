@@ -512,6 +512,29 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ NUEVO: liberar perfil en lugar de borrarlo cuando quieras reutilizar slot
+  app.patch("/api/profiles/:id/release", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+
+      const profile = await storage.updateProfile(req.params.id, userId, {
+        status: "disponible",
+        clientId: null,
+        name: "Disponible",
+        phone: null,
+        pin: null,
+        price: null,
+        startDate: null,
+        endDate: null,
+      } as any);
+
+      res.json(profile);
+    } catch (error) {
+      console.error("Error liberando perfil:", error);
+      res.status(500).json({ message: "Failed to release profile" });
+    }
+  });
+
   app.delete("/api/profiles/:id", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);

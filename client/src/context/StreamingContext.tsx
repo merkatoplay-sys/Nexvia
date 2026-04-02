@@ -253,7 +253,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     enabled: isAuthenticated,
   });
 
-  const isLoading = accountsLoading || clientsLoading || expensesLoading || servicesLoading || profilesLoading || settingsLoading;
+  const isLoading =
+    accountsLoading ||
+    clientsLoading ||
+    expensesLoading ||
+    servicesLoading ||
+    profilesLoading ||
+    settingsLoading;
 
   // ✅ Helpers: resolver servicio por ID y fallback por nombre (tolerante)
   const getServiceForAccount = (acc?: Partial<Account> | null) => {
@@ -365,7 +371,6 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     mutationFn: ({ id, updates }: { id: string; updates: Partial<Service> }) =>
       fetchAPI(`/api/services/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     onSuccess: () => {
-      // ✅ si cambias nombre de servicio, backend sincroniza cuentas -> refrescamos todo
       queryClient.invalidateQueries({ queryKey: ['/api/services'] });
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
@@ -393,8 +398,9 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     },
   });
 
-  const deleteProfileMutation = useMutation({
-    mutationFn: (id: string) => fetchAPI(`/api/profiles/${id}`, { method: 'DELETE' }),
+  // ✅ CAMBIO: ya no borra, ahora libera el slot
+  const releaseProfileMutation = useMutation({
+    mutationFn: (id: string) => fetchAPI(`/api/profiles/${id}/release`, { method: 'PATCH' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/profiles'] });
       queryClient.invalidateQueries({ queryKey: ['/api/expenses'] });
@@ -737,21 +743,13 @@ export const StreamingProvider = ({ children }: { children: ReactNode }) => {
     return byName?.maxProfiles || 7;
   };
 
-  const deleteService = async (id: string) => {
-    try {
-      await deleteServiceMutation.mutateAsync(id);
-      toast.success('Servicio eliminado');
-    } catch {
-      toast.error('Error al eliminar el servicio');
-    }
-  };
-
+  // ✅ CAMBIO: esta función ahora libera el perfil, no lo elimina físicamente
   const deleteProfile = async (accountId: string, profileId: string) => {
     try {
-      await deleteProfileMutation.mutateAsync(profileId);
-      toast.success('Perfil eliminado');
+      await releaseProfileMutation.mutateAsync(profileId);
+      toast.success('Perfil liberado correctamente');
     } catch {
-      toast.error('Error al eliminar el perfil');
+      toast.error('Error al liberar el perfil');
     }
   };
 

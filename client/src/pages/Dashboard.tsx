@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Users, DollarSign, TrendingUp, AlertTriangle, ShoppingCart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { differenceInDays } from 'date-fns';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 const money = (v: any) =>
   `$${Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -18,8 +20,33 @@ const buildDisplayName = (serviceName: string, planName?: any) => {
   return plan ? `${serviceName} ${plan}` : serviceName;
 };
 
+type RenewalTarget =
+  | {
+      open: false;
+      type: null;
+      accountId: '';
+      profileId: '';
+      title: '';
+    }
+  | {
+      open: true;
+      type: 'cuenta' | 'perfil';
+      accountId: string;
+      profileId: string;
+      title: string;
+    };
+
 export default function Dashboard() {
-  const { getStats, accounts, services, getServiceColor } = useStreaming();
+  const {
+    getStats,
+    accounts,
+    services,
+    getServiceColor,
+    renewAccountMaster,
+    renewProfileSale,
+    deleteProfile,
+  } = useStreaming();
+
   const [, navigate] = useLocation();
 
   const stats = getStats();
@@ -27,6 +54,18 @@ export default function Dashboard() {
   const servicesSafe = services ?? [];
 
   const [expiringOpen, setExpiringOpen] = useState(false);
+
+  // ✅ modal renovar
+  const [renewalTarget, setRenewalTarget] = useState<RenewalTarget>({
+    open: false,
+    type: null,
+    accountId: '',
+    profileId: '',
+    title: '',
+  });
+  const [renewalDays, setRenewalDays] = useState<number>(30);
+  const [renewalCost, setRenewalCost] = useState<number>(0);
+  const [isSubmittingRenewal, setIsSubmittingRenewal] = useState(false);
 
   const getServiceForAccount = (acc: any) => {
     if (!acc) return null;
@@ -78,7 +117,7 @@ export default function Dashboard() {
         .map((p: any) => ({
           ...p,
           accountId: acc.id,
-          accountTitle: getServiceNameForAccount(acc), // ✅ incluye plan
+          accountTitle: getServiceNameForAccount(acc),
           accountEmail: acc.email,
         }))
     );
@@ -92,6 +131,7 @@ export default function Dashboard() {
       accountId: acc.id,
       title: getServiceNameForAccount(acc),
       subtitle: acc.email,
+      suggestedCost: Number(acc.cost || 0),
     }));
 
     const profItems = expiringSoonProfiles.map((p: any) => ({
@@ -101,12 +141,86 @@ export default function Dashboard() {
       profileId: p.id,
       title: p.name || 'Perfil',
       subtitle: `${p.accountTitle} • ${p.accountEmail}`,
+      suggestedCost: Number(p.price || 0),
     }));
 
     return [...accItems, ...profItems].sort((a, b) => a.daysLeft - b.daysLeft);
   }, [expiringSoonAccounts, expiringSoonProfiles]);
 
   const expiringTotal = expiringSoonAccounts.length + expiringSoonProfiles.length;
+
+  const openRenewDialog = (item: any) => {
+    setRenewalDays(30);
+    setRenewalCost(Number(item.suggestedCost || 0));
+    setRenewalTarget({
+      open: true,
+      type: item.type,
+      accountId: item.accountId,
+      profileId: item.profileId ?? '',
+      title: item.title,
+    });
+  };
+
+  const closeRenewDialog = () => {
+    setRenewalTarget({
+      open: false,
+      type: null,
+      accountId: '',
+      profileId: '',
+      title: '',
+    });
+    setRenewalDays(30);
+    setRenewalCost(0);
+    setIsSubmittingRenewal(false);
+  };
+
+  const handleConfirmRenewal = async () => {
+    if (!renewalTarget.open || !renewalTarget.type) return;
+
+    if (renewalDays <= 0) {
+      toast.error('Ingresa días válidos');
+      return;
+    }
+
+    if (renewalCost <= 0) {
+      toast.error('Ingresa un monto válido');
+      return;
+    }
+
+    setIsSubmittingRenewal(true);
+
+    try {
+      let ok = false;
+
+      if (renewalTarget.type === 'cuenta') {
+        ok = await renewAccountMaster(renewalTarget.accountId, renewalDays, renewalCost);
+      } else {
+        ok = await renewProfileSale(
+          renewalTarget.accountId,
+          renewalTarget.profileId,
+          renewalDays,
+          renewalCost
+        );
+      }
+
+      if (ok) {
+        closeRenewDialog();
+        setExpiringOpen(false);
+      }
+    } finally {
+      setIsSubmittingRenewal(false);
+    }
+  };
+
+  const handleReleaseProfile = async (item: any) => {
+    if (item.type !== 'perfil' || !item.profileId) return;
+
+    const ok = window.confirm(`¿Liberar el perfil "${item.title}"?\n\nEl slot quedará disponible para venderlo de nuevo.`);
+    if (!ok) return;
+
+    await deleteProfile(item.accountId, item.profileId);
+    setExpiringOpen(false);
+  };
 
   return (
     <>
@@ -124,7 +238,6 @@ export default function Dashboard() {
           </Button>
         </div>
 
-        {/* ✅ Compacto en teléfono */}
         <div className="grid gap-3 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
           <motion.div variants={item}>
             <Card className="glass-card hover:bg-card/80 transition-colors">
@@ -169,7 +282,6 @@ export default function Dashboard() {
             </Card>
           </motion.div>
 
-          {/* ✅ Por vencer: clickable + desglose */}
           <motion.div variants={item}>
             <Card
               className="glass-card hover:bg-card/80 transition-colors border-orange-500/20 cursor-pointer"
@@ -256,9 +368,9 @@ export default function Dashboard() {
         </motion.div>
       </motion.div>
 
-      {/* ✅ Modal de “Por vencer” con links directos */}
+      {/* ✅ Modal de “Por vencer” */}
       <Dialog open={expiringOpen} onOpenChange={setExpiringOpen}>
-        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-h-[80vh] overflow-y-auto max-w-2xl">
           <DialogHeader>
             <DialogTitle>Próximos vencimientos (3 días)</DialogTitle>
           </DialogHeader>
@@ -270,7 +382,7 @@ export default function Dashboard() {
               {expiringItems.map((it: any) => (
                 <div
                   key={`${it.type}-${it.accountId}-${it.profileId ?? ''}`}
-                  className="flex items-center justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -285,21 +397,41 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground truncate">{it.subtitle}</p>
                   </div>
 
-                  <Button
-                    size="sm"
-                    className="bg-primary text-white shrink-0"
-                    onClick={() => {
-                      // ✅ ir directo
-                      const params = new URLSearchParams();
-                      params.set('accountId', it.accountId);
-                      if (it.type === 'perfil' && it.profileId) params.set('profileId', it.profileId);
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => openRenewDialog(it)}
+                    >
+                      Renovar
+                    </Button>
 
-                      setExpiringOpen(false);
-                      navigate(`/accounts?${params.toString()}`);
-                    }}
-                  >
-                    Ver
-                  </Button>
+                    {it.type === 'perfil' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                        onClick={() => handleReleaseProfile(it)}
+                      >
+                        Liberar
+                      </Button>
+                    )}
+
+                    <Button
+                      size="sm"
+                      className="bg-primary text-white"
+                      onClick={() => {
+                        const params = new URLSearchParams();
+                        params.set('accountId', it.accountId);
+                        if (it.type === 'perfil' && it.profileId) params.set('profileId', it.profileId);
+
+                        setExpiringOpen(false);
+                        navigate(`/accounts?${params.toString()}`);
+                      }}
+                    >
+                      Ver
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -312,6 +444,66 @@ export default function Dashboard() {
               className="border-white/10 hover:bg-white/5 text-white"
             >
               Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✅ Modal renovar */}
+      <Dialog open={renewalTarget.open} onOpenChange={(open) => !open && closeRenewDialog()}>
+        <DialogContent className="bg-card/95 backdrop-blur-xl border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {renewalTarget.type === 'cuenta' ? 'Renovar cuenta' : 'Renovar perfil'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <p className="text-xs text-muted-foreground">Elemento seleccionado</p>
+              <p className="text-sm text-white font-medium">{renewalTarget.title}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">Días</label>
+              <Input
+                type="number"
+                min="1"
+                className="glass-input"
+                value={renewalDays}
+                onChange={(e) => setRenewalDays(parseInt(e.target.value || '0') || 0)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">
+                {renewalTarget.type === 'cuenta' ? 'Costo' : 'Precio'}
+              </label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                className="glass-input"
+                value={renewalCost}
+                onChange={(e) => setRenewalCost(parseFloat(e.target.value || '0') || 0)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={closeRenewDialog}
+              className="border-white/10 hover:bg-white/5 text-white"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmRenewal}
+              className="bg-primary text-white"
+              disabled={isSubmittingRenewal}
+            >
+              Confirmar renovación
             </Button>
           </DialogFooter>
         </DialogContent>
